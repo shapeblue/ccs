@@ -23,10 +23,13 @@ import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.offering.ServiceOffering;
 import com.cloud.user.Account;
+import com.cloud.utils.component.PluggableService;
 import org.apache.cloudstack.api.command.user.containercluster.DeleteContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
+import org.apache.cloudstack.api.response.ContainerClusterResponse;
+import org.apache.cloudstack.api.response.ListResponse;
 
-
-public interface ContainerClusterService {
+public interface ContainerClusterService extends PluggableService {
 
     ContainerCluster createContainerCluster(String name,
                                             String displayName,
@@ -36,12 +39,16 @@ public interface ContainerClusterService {
                                             Long networkId,
                                             String sshKeyPair,
                                             Long nodeCount
-                                            ) throws InsufficientCapacityException, ResourceAllocationException, ManagementServerException;
-
-
+                                            ) throws InsufficientCapacityException,
+                     ResourceAllocationException, ManagementServerException;
 
     ContainerCluster startContainerCluster(long containerClusterId) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException;
 
     boolean deleteContainerCluster(DeleteContainerClusterCmd cmd) throws ManagementServerException;
+
+    ListResponse<ContainerClusterResponse>  listContainerClusters(ListContainerClusterCmd cmd);
+
+    public ContainerClusterResponse createContainerClusterResponse(ContainerCluster containerCluster);
+
 }

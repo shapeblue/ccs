@@ -196,7 +196,7 @@ public class ContainerClusterResponse extends BaseResponse implements Controlled
     @Param(description = "keypair details")
     private String keypair;
 
-    @SerializedName(ApiConstants.CONTAINER_CLUSTER_SIZE)
+    @SerializedName(ApiConstants.SIZE)
     @Param(description = "cluster size")
     private String clusterSize;
 
@@ -216,7 +216,7 @@ public class ContainerClusterResponse extends BaseResponse implements Controlled
     @Param(description = "URL end point for the cluster")
     private String endpoint;
 
-    @SerializedName(ApiConstants.CONSOLE_END_POINT)
+    @SerializedName(ApiConstants.END_POINT)
     @Param(description = "URL end point for the cluster UI")
     private String consoleendpoint;
 

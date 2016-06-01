@@ -14,9 +14,11 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
 package org.apache.cloudstack.api.command.user.containercluster;
 
-import com.cloud.event.EventTypes;
+import javax.inject.Inject;
+
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.InsufficientCapacityException;
 import com.cloud.exception.NetworkRuleConflictException;
@@ -28,13 +30,14 @@ import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.cloudstack.api.response.SuccessResponse;
 import org.apache.cloudstack.context.CallContext;
+import com.cloud.containercluster.ContainerClusterService;
 import org.apache.log4j.Logger;
 
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.Parameter;
 
-@APICommand(name = "deleteContainerCluster", description = "deletes a container clusters", responseObject = SuccessResponse.class)
+@APICommand(name = "deleteContainerCluster", description = "deletes a container cluster", responseObject = SuccessResponse.class)
 public class DeleteContainerClusterCmd extends BaseAsyncCmd {
 
     public static final Logger s_logger = Logger.getLogger(DeleteContainerClusterCmd.class.getName());
@@ -59,6 +62,9 @@ public class DeleteContainerClusterCmd extends BaseAsyncCmd {
     public Long getId() {
         return id;
     }
+
+    @Inject
+    public ContainerClusterService _containerClusterService;
 
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
@@ -89,12 +95,12 @@ public class DeleteContainerClusterCmd extends BaseAsyncCmd {
 
     @Override
     public String getEventType() {
-        return EventTypes.EVENT_CLUSTER_DELETE;
+        return "CONTAINER.CLUSTER.DELETE";
     }
 
     @Override
     public String getEventDescription() {
-        return "Deleting VM cluster. Cluster Id: " + getId();
+        return "Deleting container cluster. Cluster Id: " + getId();
     }
 
 }

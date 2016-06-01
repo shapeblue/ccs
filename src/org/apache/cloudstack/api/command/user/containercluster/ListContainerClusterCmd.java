@@ -14,7 +14,10 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
 package org.apache.cloudstack.api.command.user.containercluster;
+
+import javax.inject.Inject;
 
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.log4j.Logger;
@@ -25,10 +28,10 @@ import org.apache.cloudstack.api.BaseListCmd;
 import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ResponseObject.ResponseView;
 import org.apache.cloudstack.api.response.ListResponse;
+import com.cloud.containercluster.ContainerClusterService;
 
-
-
-@APICommand(name = "listContainerCluster", description = "Lists container clusters", responseObject = ContainerClusterResponse.class, responseView = ResponseView.Restricted,
+@APICommand(name = "listContainerCluster", description = "Lists container clusters",
+        responseObject = ContainerClusterResponse.class, responseView = ResponseView.Restricted,
         requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
 public class ListContainerClusterCmd extends BaseListCmd {
 
@@ -39,7 +42,8 @@ public class ListContainerClusterCmd extends BaseListCmd {
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
     /////////////////////////////////////////////////////
-    @Parameter(name = ApiConstants.ID, type = CommandType.UUID, entityType = ContainerClusterResponse.class, description = "the ID of the container cluster")
+    @Parameter(name = ApiConstants.ID, type = CommandType.UUID, entityType = ContainerClusterResponse.class,
+            description = "the ID of the container cluster")
     private Long id;
 
     /////////////////////////////////////////////////////
@@ -49,6 +53,9 @@ public class ListContainerClusterCmd extends BaseListCmd {
     public Long getId() {
         return id;
     }
+
+    @Inject
+    public ContainerClusterService _containerClusterService;
 
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
@@ -62,7 +69,7 @@ public class ListContainerClusterCmd extends BaseListCmd {
     @Override
     public void execute() {
 
-        ListResponse<ContainerClusterResponse> response = _queryService.listContainerClusters(this);
+        ListResponse<ContainerClusterResponse> response = _containerClusterService.listContainerClusters(this);
         response.setResponseName(getCommandName());
         setResponseObject(response);
     }
