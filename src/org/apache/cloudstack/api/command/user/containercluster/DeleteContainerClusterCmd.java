@@ -24,6 +24,7 @@ import com.cloud.exception.InsufficientCapacityException;
 import com.cloud.exception.NetworkRuleConflictException;
 import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
+import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
 import org.apache.cloudstack.api.ServerApiException;
@@ -37,7 +38,8 @@ import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.Parameter;
 
-@APICommand(name = "deleteContainerCluster", description = "deletes a container cluster", responseObject = SuccessResponse.class)
+@APICommand(name = "deleteContainerCluster", description = "deletes a container cluster", responseObject = SuccessResponse.class,
+        authorized = {RoleType.Admin, RoleType.DomainAdmin, RoleType.User})
 public class DeleteContainerClusterCmd extends BaseAsyncCmd {
 
     public static final Logger s_logger = Logger.getLogger(DeleteContainerClusterCmd.class.getName());

@@ -19,6 +19,7 @@ package org.apache.cloudstack.api.command.user.containercluster;
 
 import javax.inject.Inject;
 
+import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.log4j.Logger;
 
@@ -32,7 +33,8 @@ import com.cloud.containercluster.ContainerClusterService;
 
 @APICommand(name = "listContainerCluster", description = "Lists container clusters",
         responseObject = ContainerClusterResponse.class, responseView = ResponseView.Restricted,
-        requestHasSensitiveInfo = false, responseHasSensitiveInfo = false)
+        requestHasSensitiveInfo = false, responseHasSensitiveInfo = false,
+        authorized = {RoleType.Admin, RoleType.DomainAdmin, RoleType.User})
 public class ListContainerClusterCmd extends BaseListCmd {
 
     public static final Logger s_logger = Logger.getLogger(ListContainerClusterCmd.class.getName());

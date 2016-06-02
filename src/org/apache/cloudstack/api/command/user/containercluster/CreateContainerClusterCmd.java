@@ -32,6 +32,7 @@ import com.cloud.exception.ResourceUnavailableException;
 
 import com.cloud.offering.ServiceOffering;
 import com.cloud.user.Account;
+import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiCommandJobType;
@@ -56,8 +57,9 @@ import org.apache.log4j.Logger;
         responseView = ResponseView.Restricted,
         entityType = {ContainerCluster.class},
         requestHasSensitiveInfo = false,
-        responseHasSensitiveInfo = true)
-
+        responseHasSensitiveInfo = true,
+        authorized = {RoleType.Admin, RoleType.DomainAdmin, RoleType.User}
+)
 public class CreateContainerClusterCmd extends BaseAsyncCreateCustomIdCmd {
 
     public static final Logger s_logger = Logger.getLogger(CreateContainerClusterCmd.class.getName());
