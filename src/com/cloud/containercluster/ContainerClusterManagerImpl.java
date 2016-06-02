@@ -14,6 +14,7 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
 package com.cloud.containercluster;
 
 import com.cloud.api.ApiDBUtils;
@@ -58,7 +59,11 @@ import com.cloud.user.User;
 import com.cloud.user.dao.AccountDao;
 import com.cloud.user.dao.SSHKeyPairDao;
 import com.cloud.uservm.UserVm;
+import com.cloud.utils.component.ComponentContext;
+import com.cloud.utils.db.Transaction;
+import com.cloud.utils.db.TransactionCallback;
 import com.cloud.utils.db.TransactionCallbackWithException;
+import com.cloud.utils.db.TransactionStatus;
 import com.cloud.utils.net.Ip;
 import com.cloud.vm.Nic;
 import com.cloud.vm.ReservationContext;
@@ -67,6 +72,11 @@ import com.cloud.vm.UserVmService;
 import com.cloud.vm.UserVmVO;
 import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.dao.UserVmDao;
+import com.cloud.network.Network;
+import com.cloud.offering.ServiceOffering;
+import com.cloud.template.VirtualMachineTemplate;
+import com.cloud.user.Account;
+import com.cloud.utils.component.ManagerBase;
 import org.apache.cloudstack.acl.ControlledEntity;
 import org.apache.cloudstack.acl.SecurityChecker;
 import org.apache.cloudstack.api.ApiErrorCode;
@@ -84,22 +94,12 @@ import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationSe
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
 import org.apache.log4j.Logger;
 
-import com.cloud.utils.db.Transaction;
-import com.cloud.utils.db.TransactionCallback;
-import com.cloud.utils.db.TransactionStatus;
-
-import com.cloud.network.Network;
-import com.cloud.offering.ServiceOffering;
-
-import com.cloud.template.VirtualMachineTemplate;
-import com.cloud.user.Account;
-
-import com.cloud.utils.component.ManagerBase;
-
 import javax.ejb.Local;
 import javax.inject.Inject;
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.StringWriter;
+import java.io.PrintWriter;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.math.BigInteger;
@@ -112,7 +112,6 @@ import java.util.List;
 import java.util.Map;
 import java.net.Socket;
 import java.security.SecureRandom;
-
 import org.apache.commons.codec.binary.Base64;
 
 @Local(value = {ContainerClusterManager.class})
@@ -173,8 +172,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     @Inject
     private UserVmDao _userVmDao;
 
-    static String readFile(String path)
-            throws IOException
+    static String readFile(String path) throws IOException
     {
         byte[] encoded = Files.readAllBytes(Paths.get(path));
         return new String(encoded);
@@ -306,6 +304,13 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         _containerClusterDao.update(containerCluster.getId(), containerCluster);
     }
 
+    public static String getStackTrace(final Throwable throwable) {
+        final StringWriter sw = new StringWriter();
+        final PrintWriter pw = new PrintWriter(sw, true);
+        throwable.printStackTrace(pw);
+        return sw.getBuffer().toString();
+    }
+
     @Override
     public ContainerCluster startContainerCluster(long containerClusterId) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
@@ -408,16 +413,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         try {
 
             s_logger.debug("Provisioning firewall rule to open up port 443 on " + publicIp.getAddress() + " for cluster.");
-/*            _firewallService.createFirewallRule(publicIp.getId(),
-                    account,
-                    null,
-                    443, 443,
-                    "TCP",
-                    sourceCidrList,
-                    null, null, null, FirewallRule.FirewallRuleType.User, containerCluster.getNetworkId(),
-                    FirewallRule.TrafficType.Ingress, true);*/
 
             CreateFirewallRuleCmd rule = new CreateFirewallRuleCmd();
+            rule = ComponentContext.inject(rule);
 
             Field addressField = rule.getClass().getDeclaredField("ipAddressId");
             addressField.setAccessible(true);
@@ -443,7 +441,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             _firewallService.applyIngressFwRules(publicIp.getId(), account);
 
         } catch (Exception e) {
-            s_logger.debug("Failed to provision firewall rules for the container cluster: " + containerCluster.getName());
+            s_logger.debug("Failed to provision firewall rules for the container cluster: " + containerCluster.getName()
+                    + " due to exception: " + getStackTrace(e));
             updateContainerClusterState(containerClusterId, "Error");
             throw new ManagementServerException("Failed to provision firewall rules for the container " +
                     "cluster: " + containerCluster.getName());
@@ -660,6 +659,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         try {
             StartVMCmd startVm = new StartVMCmd();
+            startVm = ComponentContext.inject(startVm);
             Field f = startVm.getClass().getDeclaredField("id");
             f.setAccessible(true);
             f.set(startVm, masterVm.getId());
@@ -730,6 +730,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         try {
             StartVMCmd startVm = new StartVMCmd();
+            startVm = ComponentContext.inject(startVm);
             Field f = startVm.getClass().getDeclaredField("id");
             f.setAccessible(true);
             f.set(startVm, nodeVm.getId());
