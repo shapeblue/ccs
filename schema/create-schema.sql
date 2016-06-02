@@ -1,4 +1,4 @@
-CREATE TABLE `cloud`.`container_cluster` (
+CREATE TABLE IF NOT EXISTS `cloud`.`container_cluster` (
     `id` bigint unsigned NOT NULL auto_increment COMMENT 'id',
     `uuid` varchar(40),
     `name` varchar(255) NOT NULL,
@@ -34,7 +34,7 @@ INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'manag
 INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'management-server',
 'cloud.container.cluster.node.cloudconfig', '/etc/cloudstack/management/k8s-node.yml', 'file location path of the cloud config used for creating container cluster node', '/etc/cloudstack/management/k8s-node.yml', NULL , NULL, 0);
 
-CREATE TABLE `cloud`.`container_cluster_vm_map` (
+CREATE TABLE IF NOT EXISTS `cloud`.`container_cluster_vm_map` (
     `id` bigint unsigned NOT NULL auto_increment COMMENT 'id',
     `cluster_id` bigint unsigned NOT NULL COMMENT 'cluster id',
     `vm_id` bigint unsigned NOT NULL COMMENT 'vm id',
@@ -43,7 +43,7 @@ CREATE TABLE `cloud`.`container_cluster_vm_map` (
     CONSTRAINT `container_cluster_vm_map_cluster__id` FOREIGN KEY `container_cluster_vm_map_cluster__id`(`cluster_id`) REFERENCES `container_cluster`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-CREATE TABLE `cloud`.`container_cluster_details` (
+CREATE TABLE IF NOT EXISTS `cloud`.`container_cluster_details` (
     `id` bigint unsigned NOT NULL auto_increment COMMENT 'id',
     `cluster_id` bigint unsigned NOT NULL COMMENT 'cluster id',
     `username` varchar(255) NOT NULL,
