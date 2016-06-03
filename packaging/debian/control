@@ -1,0 +1,13 @@
+Source: cloudstack-ccs
+Section: libs
+Priority: extra
+Maintainer: ShapeBlue Engineering <engineering@shapeblue.com>
+Build-Depends: debhelper (>= 7), openjdk-7-jdk | openjdk-8-jdk, maven3 | maven (>= 3)
+Standards-Version: 3.8.1
+Homepage: http://packages.shapeblue.com/
+
+Package: cloudstack-ccs
+Architecture: all
+Depends: cloudstack-management
+Description: CloudStack Container Service Plugin
+ The CloudStack Container Service plugin from ShapeBlue

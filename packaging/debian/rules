@@ -1,0 +1,78 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+# Sample debian/rules that uses debhelper.
+#
+# This file was originally written by Joey Hess and Craig Small.
+# As a special exception, when this file is copied by dh-make into a
+# dh-make output file, you may use that output file without restriction.
+# This special exception was added by Craig Small in version 0.37 of dh-make.
+#
+# Modified to make a template file for a multi-binary package with separated
+# build-arch and build-indep targets  by Bill Allombert 2001
+
+DEBVERS := $(shell dpkg-parsechangelog | sed -n -e 's/^Version: //p')
+VERSION := $(shell cat ../pom.xml | sed '24!d' | cut -d'>' -f2 | cut -d'<' -f1)
+MVNADD := $(shell if echo '$(DEBVERS)' | grep -q snapshot; then echo ; fi )
+PACKAGE = $(shell dh_listpackages|head -n 1|cut -d '-' -f 1)
+SYSCONFDIR = "/etc"
+DESTDIR = "debian/tmp"
+
+# Uncomment this to turn on verbose mode.
+export DH_VERBOSE=1
+
+# This has to be exported to make some magic below work.
+export DH_OPTIONS
+
+configure: configure-stamp
+configure-stamp:
+	dh_testdir
+
+build: build-indep
+
+build-indep: build-indep-stamp
+
+build-indep-stamp: configure
+	cd .. && mvn clean package ${ACS_BUILD_OPTS}
+	touch $@
+
+clean:
+	dh_testdir
+	dh_testroot
+	rm -f build-arch-stamp build-indep-stamp
+	dh_clean
+
+install:
+	dh_testdir
+	dh_testroot
+	dh_prep -s
+
+	# Common packages
+	mkdir -p $(DESTDIR)/$(SYSCONFDIR)/$(PACKAGE)
+	mkdir -p $(DESTDIR)/usr/share
+
+	# cloudstack-ccs
+	mkdir $(DESTDIR)/$(SYSCONFDIR)/$(PACKAGE)/management
+	mkdir -p $(DESTDIR)/usr/share/$(PACKAGE)-management/webapps/client/WEB-INF/lib
+	mkdir -p $(DESTDIR)/usr/share/$(PACKAGE)-management/webapps/client/plugins
+	mkdir -p $(DESTDIR)/usr/share/$(PACKAGE)-management/setup
+	cp ../target/cloud-plugin-ccs-$(VERSION)$(MVNADD).jar $(DESTDIR)/usr/share/$(PACKAGE)-management/webapps/client/WEB-INF/lib/
+	cp -r ../../../ui/plugins/ccs $(DESTDIR)/usr/share/$(PACKAGE)-management/webapps/client/plugins/
+	cp -r ../schema/* $(DESTDIR)/usr/share/$(PACKAGE)-management/setup/
+
+	dh_installdirs
+	dh_install
+	dh_python2
+
+binary: install
+	dh_install
+	dh_installchangelogs
+	dh_installman
+	dh_link
+	dh_strip
+	dh_compress
+	dh_fixperms
+	dh_makeshlibs
+	dh_installdeb
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
