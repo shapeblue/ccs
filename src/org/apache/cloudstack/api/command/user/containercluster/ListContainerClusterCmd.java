@@ -31,9 +31,12 @@ import org.apache.cloudstack.api.ResponseObject.ResponseView;
 import org.apache.cloudstack.api.response.ListResponse;
 import com.cloud.containercluster.ContainerClusterService;
 
-@APICommand(name = "listContainerCluster", description = "Lists container clusters",
-        responseObject = ContainerClusterResponse.class, responseView = ResponseView.Restricted,
-        requestHasSensitiveInfo = false, responseHasSensitiveInfo = false,
+@APICommand(name = "listContainerCluster",
+        description = "Lists container clusters",
+        responseObject = ContainerClusterResponse.class,
+        responseView = ResponseView.Restricted,
+        requestHasSensitiveInfo = false,
+        responseHasSensitiveInfo = true,
         authorized = {RoleType.Admin, RoleType.DomainAdmin, RoleType.User})
 public class ListContainerClusterCmd extends BaseListCmd {
 
@@ -44,7 +47,8 @@ public class ListContainerClusterCmd extends BaseListCmd {
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
     /////////////////////////////////////////////////////
-    @Parameter(name = ApiConstants.ID, type = CommandType.UUID, entityType = ContainerClusterResponse.class,
+    @Parameter(name = ApiConstants.ID, type = CommandType.UUID, 
+            entityType = ContainerClusterResponse.class,
             description = "the ID of the container cluster")
     private Long id;
 

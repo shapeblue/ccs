@@ -14,6 +14,7 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
 package com.cloud.containercluster;
 
 import org.apache.cloudstack.acl.ControlledEntity;
@@ -22,25 +23,25 @@ import org.apache.cloudstack.api.Identity;
 import org.apache.cloudstack.api.InternalIdentity;
 
 /**
- * VirtualMachine describes the properties held by a virtual machine
+ * ContainerCluster describes the properties of container cluster
  *
  */
 public interface ContainerCluster extends ControlledEntity, Identity, InternalIdentity, Displayable {
 
-    public long getId();
-    public java.lang.String getName();
-    public String getDescription();
-    public long getZoneId();
-    public long getServiceOfferingId();
-    public long getTemplateId();
-    public long getNetworkId();
-    public long getDomainId();
-    public long getAccountId();
-    public long getNodeCount();
-    public String getKeyPair();
-    public String getState();
-    public long getCores();
-    public long getMemory();
-    public String getEndpoint();
-    public String getConsoleEndpoint();
+    long getId();
+    String getName();
+    String getDescription();
+    long getZoneId();
+    long getServiceOfferingId();
+    long getTemplateId();
+    long getNetworkId();
+    long getDomainId();
+    long getAccountId();
+    long getNodeCount();
+    String getKeyPair();
+    String getState();
+    long getCores();
+    long getMemory();
+    String getEndpoint();
+    String getConsoleEndpoint();
 }

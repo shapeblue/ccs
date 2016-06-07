@@ -33,8 +33,8 @@ public interface ContainerClusterService extends PluggableService {
 
     ContainerCluster createContainerCluster(String name,
                                             String displayName,
-                                            DataCenter zone,
-                                            ServiceOffering serviceOffering,
+                                            Long zoneId,
+                                            Long serviceOffering,
                                             Account owner,
                                             Long networkId,
                                             String sshKeyPair,
@@ -45,10 +45,10 @@ public interface ContainerClusterService extends PluggableService {
     ContainerCluster startContainerCluster(long containerClusterId) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException;
 
-    boolean deleteContainerCluster(DeleteContainerClusterCmd cmd) throws ManagementServerException;
+    boolean deleteContainerCluster(Long containerClusterId) throws ManagementServerException;
 
     ListResponse<ContainerClusterResponse>  listContainerClusters(ListContainerClusterCmd cmd);
 
-    public ContainerClusterResponse createContainerClusterResponse(ContainerCluster containerCluster);
+    ContainerClusterResponse createContainerClusterResponse(ContainerCluster containerCluster);
 
 }

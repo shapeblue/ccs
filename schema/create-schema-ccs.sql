@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS `cloud`.`container_cluster` (
     `id` bigint unsigned NOT NULL auto_increment COMMENT 'id',
     `uuid` varchar(40),
     `name` varchar(255) NOT NULL,
-    `description` varchar(4096) NULL COMMENT 'description',
+    `description` varchar(4096) COMMENT 'display text for this container cluster',
     `zone_id` bigint unsigned NOT NULL COMMENT 'zone id',
     `service_offering_id` bigint unsigned COMMENT 'service offering id for the cluster VM',
     `template_id` bigint unsigned COMMENT 'vm_template.id',

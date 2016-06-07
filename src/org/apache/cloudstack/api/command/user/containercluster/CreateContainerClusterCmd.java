@@ -21,24 +21,24 @@ import javax.inject.Inject;
 
 import com.cloud.containercluster.ContainerCluster;
 import com.cloud.containercluster.ContainerClusterService;
+import com.cloud.containercluster.CcsEventTypes;
 import com.cloud.dc.DataCenter;
 import com.cloud.exception.InsufficientCapacityException;
 import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ManagementServerException;
 import com.cloud.exception.InvalidParameterValueException;
 import com.cloud.exception.ConcurrentOperationException;
-
 import com.cloud.exception.ResourceUnavailableException;
-
 import com.cloud.offering.ServiceOffering;
 import com.cloud.user.Account;
 import org.apache.cloudstack.acl.RoleType;
+import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiCommandJobType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
-import org.apache.cloudstack.api.BaseAsyncCreateCustomIdCmd;
+import org.apache.cloudstack.api.BaseAsyncCreateCmd;
 import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ResponseObject.ResponseView;
 import org.apache.cloudstack.api.ServerApiException;
@@ -52,7 +52,7 @@ import org.apache.cloudstack.context.CallContext;
 import org.apache.log4j.Logger;
 
 @APICommand(name = "createContainerCluster",
-        description = "Creates and cluster of VM's for launching containers.",
+        description = "Creates a cluster of VM's for launching containers.",
         responseObject = ContainerClusterResponse.class,
         responseView = ResponseView.Restricted,
         entityType = {ContainerCluster.class},
@@ -60,7 +60,7 @@ import org.apache.log4j.Logger;
         responseHasSensitiveInfo = true,
         authorized = {RoleType.Admin, RoleType.DomainAdmin, RoleType.User}
 )
-public class CreateContainerClusterCmd extends BaseAsyncCreateCustomIdCmd {
+public class CreateContainerClusterCmd extends BaseAsyncCreateCmd {
 
     public static final Logger s_logger = Logger.getLogger(CreateContainerClusterCmd.class.getName());
 
@@ -70,37 +70,43 @@ public class CreateContainerClusterCmd extends BaseAsyncCreateCustomIdCmd {
     //////////////// API parameters /////////////////////
     /////////////////////////////////////////////////////
 
-    @Parameter(name = ApiConstants.NAME, type = CommandType.STRING, description = "name for the container cluster")
+    @Parameter(name = ApiConstants.NAME, type = CommandType.STRING, required = true,  description = "name for the container cluster")
     private String name;
 
     @Parameter(name = ApiConstants.DESCRIPTION, type = CommandType.STRING, description = "description for the container cluster")
     private String description;
 
+    @ACL(accessType = AccessType.UseEntry)
     @Parameter(name = ApiConstants.ZONE_ID, type = CommandType.UUID, entityType = ZoneResponse.class, required = true,
             description = "availability zone in which container cluster to be launched")
     private Long zoneId;
 
-    @ACL
+    @ACL(accessType = AccessType.UseEntry)
     @Parameter(name = ApiConstants.SERVICE_OFFERING_ID, type = CommandType.UUID, entityType = ServiceOfferingResponse.class,
             required = true, description = "the ID of the service offering for the virtual machines in the cluster.")
     private Long serviceOfferingId;
 
+    @ACL(accessType = AccessType.UseEntry)
     @Parameter(name = ApiConstants.ACCOUNT, type = CommandType.STRING, description = "an optional account for the" +
             " virtual machine. Must be used with domainId.")
     private String accountName;
 
+    @ACL(accessType = AccessType.UseEntry)
     @Parameter(name = ApiConstants.DOMAIN_ID, type = CommandType.UUID, entityType = DomainResponse.class,
             description = "an optional domainId for the virtual machine. If the account parameter is used, domainId must also be used.")
     private Long domainId;
 
+    @ACL(accessType = AccessType.UseEntry)
     @Parameter(name = ApiConstants.PROJECT_ID, type = CommandType.UUID, entityType = ProjectResponse.class,
             description = "Deploy cluster for the project")
     private Long projectId;
 
+    @ACL(accessType = AccessType.UseEntry)
     @Parameter(name = ApiConstants.NETWORK_ID, type = CommandType.UUID, entityType = NetworkResponse.class,
             description = "Network in which container cluster is to be launched")
     private Long networkId;
 
+    @ACL(accessType = AccessType.UseEntry)
     @Parameter(name = ApiConstants.SSH_KEYPAIR, type = CommandType.STRING,
             description = "name of the ssh key pair used to login to the virtual machines")
     private String sshKeyPairName;
@@ -177,12 +183,12 @@ public class CreateContainerClusterCmd extends BaseAsyncCreateCustomIdCmd {
 
     @Override
     public String getEventType() {
-        return "CONTAINER.CLUSTER.CREATE";
+        return CcsEventTypes.EVENT_CONTAINER_CLUSTER_CREATE;
     }
 
     @Override
     public String getCreateEventType() {
-        return "CONTAINER.CLUSTER.CREATE";
+        return CcsEventTypes.EVENT_CONTAINER_CLUSTER_CREATE;
     }
 
     @Override
@@ -237,18 +243,8 @@ public class CreateContainerClusterCmd extends BaseAsyncCreateCustomIdCmd {
 
             Account owner = _accountService.getActiveAccountById(getEntityOwnerId());
 
-            DataCenter zone = _entityMgr.findById(DataCenter.class, zoneId);
-            if (zone == null) {
-                throw new InvalidParameterValueException("Unable to find zone by id=" + zoneId);
-            }
-
-            ServiceOffering serviceOffering = _entityMgr.findById(ServiceOffering.class, serviceOfferingId);
-            if (serviceOffering == null) {
-                throw new InvalidParameterValueException("Unable to find service offering: " + serviceOfferingId);
-            }
-
             ContainerCluster cluster = _containerClusterService.createContainerCluster(name,
-                    description, zone, serviceOffering, owner, networkId, sshKeyPairName, clusterSize);
+                    description, zoneId, serviceOfferingId, owner, networkId, sshKeyPairName, clusterSize);
 
             if (cluster != null) {
                 setEntityId(cluster.getId());

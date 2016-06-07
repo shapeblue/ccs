@@ -14,15 +14,10 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
 package com.cloud.containercluster;
 
-/**
- * Container cluster details
- *
- */
-public interface ContainerClusterDetails {
-    long getId();
-    long getClusterId();
-    String getUserName();
-    String getPassword();
+public class CcsEventTypes {
+    public static final String EVENT_CONTAINER_CLUSTER_CREATE = "CONTAINER.CLUSTER.CREATE";
+    public static final String EVENT_CONTAINER_CLUSTER_DELETE = "CONTAINER.CLUSTER.DELETE";
 }

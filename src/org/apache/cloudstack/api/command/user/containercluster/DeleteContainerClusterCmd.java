@@ -19,6 +19,7 @@ package org.apache.cloudstack.api.command.user.containercluster;
 
 import javax.inject.Inject;
 
+import com.cloud.containercluster.ContainerCluster; 
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.InsufficientCapacityException;
 import com.cloud.exception.NetworkRuleConflictException;
@@ -26,7 +27,10 @@ import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.ApiErrorCode;
+import org.apache.cloudstack.api.APICommand;
+import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.BaseAsyncCmd;
+import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.cloudstack.api.response.SuccessResponse;
@@ -34,11 +38,10 @@ import org.apache.cloudstack.context.CallContext;
 import com.cloud.containercluster.ContainerClusterService;
 import org.apache.log4j.Logger;
 
-import org.apache.cloudstack.api.APICommand;
-import org.apache.cloudstack.api.ApiConstants;
-import org.apache.cloudstack.api.Parameter;
-
-@APICommand(name = "deleteContainerCluster", description = "deletes a container cluster", responseObject = SuccessResponse.class,
+@APICommand(name = "deleteContainerCluster",
+        description = "deletes a container cluster", 
+        responseObject = SuccessResponse.class,
+        entityType = {ContainerCluster.class},
         authorized = {RoleType.Admin, RoleType.DomainAdmin, RoleType.User})
 public class DeleteContainerClusterCmd extends BaseAsyncCmd {
 
@@ -78,7 +81,9 @@ public class DeleteContainerClusterCmd extends BaseAsyncCmd {
             ServerApiException, ConcurrentOperationException, ResourceAllocationException,
             NetworkRuleConflictException {
         try {
-            _containerClusterService.deleteContainerCluster(this);
+            _containerClusterService.deleteContainerCluster(id);
+            SuccessResponse response = new SuccessResponse(getCommandName());
+            setResponseObject(response);
         } catch (Exception e) {
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to delete vm container cluster");
         }
