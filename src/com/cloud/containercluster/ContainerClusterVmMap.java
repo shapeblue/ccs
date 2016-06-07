@@ -21,8 +21,7 @@ package com.cloud.containercluster;
  *
  */
 public interface ContainerClusterVmMap {
-
-    public long getId();
-    public long getClusterId();
-    public long getVmId();
+    long getId();
+    long getClusterId();
+    long getVmId();
 }
