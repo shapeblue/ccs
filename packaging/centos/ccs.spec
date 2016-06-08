@@ -4,7 +4,7 @@
 # DISABLE the post-percentinstall java repacking and line number stripping
 # we need to find a way to just disable the java repacking and line number stripping, but not the autodeps
 
-Name:      cloudstack-ccs
+Name:      cloudstack
 Summary:   CloudStack Container Service Plugin
 #http://fedoraproject.org/wiki/PackageNamingGuidelines#Pre-Release_packages
 %if "%{?_prerelease}" != ""
@@ -50,10 +50,12 @@ mvn clean package
 mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib
 mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/plugins
 mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup
+mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
 
 cp -r target/cloud-plugin-ccs-%{_maventag}.jar ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib/
 cp -r ../../../../../../ui/plugins/ccs ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/plugins/
 cp -r ../../../../schema/* ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup/
+cp -r ../../../../conf/* ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
 
 %clean
 [ ${RPM_BUILD_ROOT} != "/" ] && rm -rf ${RPM_BUILD_ROOT}
@@ -79,10 +81,23 @@ if [ -f /usr/share/cloudstack-management/webapps/client/plugins/plugins.js ]; th
     fi
 fi
 
+%postun ccs
+if [ "$1" == "0" ] ; then
+    if [ -f /usr/share/cloudstack-management/webapps/client/plugins/plugins.js ]; then
+        if grep -q ccs /usr/share/cloudstack-management/webapps/client/plugins/plugins.js; then
+            echo "Disabling CloudStack Container Service UI Plugin"
+            rm -f /usr/share/cloudstack-management/webapps/client/plugins/plugins.js.gz
+            sed -i  "/'ccs'/d" /usr/share/cloudstack-management/webapps/client/plugins/plugins.js
+            gzip -c /usr/share/cloudstack-management/webapps/client/plugins/plugins.js > /usr/share/cloudstack-management/webapps/client/plugins/plugins.js.gz
+        fi
+    fi
+fi
+
 %files ccs
 %defattr(-,root,root,-)
 %{_datadir}/%{name}-management/webapps
 %{_datadir}/%{name}-management/setup/*.sql
+%{_sysconfdir}/%{name}/management/*.yml
 
 %changelog
 * Fri Jun 03 2016 ShapeBlue <enginering@shapeblue.com> 1.0.0
