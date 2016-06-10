@@ -46,31 +46,34 @@ echo "Executing maven packaging..."
 mvn clean package
 
 %install
+echo "Installing Cloudstack Container Service Plugin"
 [ ${RPM_BUILD_ROOT} != "/" ] && rm -rf ${RPM_BUILD_ROOT}
 mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib
 mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/plugins
 mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup
 mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
+mkdir -p ${RPM_BUILD_ROOT}%{_bindir}/
 
 cp -r target/cloud-plugin-ccs-%{_maventag}.jar ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib/
 cp -r ../../../../../../ui/plugins/ccs ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/plugins/
 cp -r ../../../../schema/* ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup/
 cp -r ../../../../conf/* ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
+cp -r ../../../../setup/* ${RPM_BUILD_ROOT}%{_bindir}/
 
 %clean
 [ ${RPM_BUILD_ROOT} != "/" ] && rm -rf ${RPM_BUILD_ROOT}
 
 %preun ccs
-echo "Pre-uninstall ccs pkg"
+echo "Running through the pre-uninstall ccs pkg steps"
 
 %pre ccs
-echo "Pre-install ccs pkg"
+echo "Running through pre-install ccs pkg steps"
 
 %post ccs
-echo "Post-install ccs pkg"
-if [ "$1" == "1" ] ; then
+echo "Running through post-install ccs pkg steps"
+#if [ "$1" == "1" ] ; then
     # Handle upgrade case here
-fi
+#fi
 
 if [ -f /usr/share/cloudstack-management/webapps/client/plugins/plugins.js ]; then
     if ! grep -q ccs /usr/share/cloudstack-management/webapps/client/plugins/plugins.js; then
@@ -78,10 +81,12 @@ if [ -f /usr/share/cloudstack-management/webapps/client/plugins/plugins.js ]; th
         rm -f /usr/share/cloudstack-management/webapps/client/plugins/plugins.js.gz
         sed -i  "/cloudStack.plugins/a 'ccs'," /usr/share/cloudstack-management/webapps/client/plugins/plugins.js
         gzip -c /usr/share/cloudstack-management/webapps/client/plugins/plugins.js > /usr/share/cloudstack-management/webapps/client/plugins/plugins.js.gz
+        echo "CloudStack Container Service UI Plugin successfully enabled"
     fi
 fi
 
 %postun ccs
+echo "Running through the post-uninstall ccs pkg steps"
 if [ "$1" == "0" ] ; then
     if [ -f /usr/share/cloudstack-management/webapps/client/plugins/plugins.js ]; then
         if grep -q ccs /usr/share/cloudstack-management/webapps/client/plugins/plugins.js; then
@@ -98,6 +103,7 @@ fi
 %{_datadir}/%{name}-management/webapps
 %{_datadir}/%{name}-management/setup/*.sql
 %{_sysconfdir}/%{name}/management/*.yml
+%{_bindir}/ccs-setup-database
 
 %changelog
 * Fri Jun 03 2016 ShapeBlue <enginering@shapeblue.com> 1.0.0

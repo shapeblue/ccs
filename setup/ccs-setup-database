@@ -1,0 +1,332 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+import os
+import sys
+import subprocess
+import glob
+from random import choice
+import string
+from optparse import OptionParser
+import commands
+import shutil
+import socket
+
+# squelch mysqldb spurious warnings
+import warnings
+warnings.simplefilter('ignore')
+# ---- This snippet of code adds the sources path and the waf configured PYTHONDIR to the Python path ----
+# ---- We do this so cloud_utils can be looked up in the following order:
+# ---- 1) Sources directory
+# ---- 2) waf configured PYTHONDIR
+# ---- 3) System Python path
+for pythonpath in (
+        "@PYTHONDIR@",
+        os.path.join(os.path.dirname(__file__),os.path.pardir,os.path.pardir,"python","lib"),
+    ):
+        if os.path.isdir(pythonpath): sys.path.insert(0,pythonpath)
+# ---- End snippet of code ----
+from cloud_utils import check_selinux, CheckFailed, resolves_to_ipv6
+
+def runCmd(cmds):
+    process = subprocess.Popen(' '.join(cmds), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = process.communicate()
+    if process.returncode != 0:
+        raise Exception(stderr)
+    return stdout
+
+class DBDeployer(object):
+    parser = None
+    options = None
+    args = None
+    serversetup = None
+    ip = None
+    user,password,host,port,rootuser,rootpassword = [None,None,None,None,None,None]
+    isDebug = False
+    mgmtsecretkey = None
+    dbsecretkey = None
+    encryptiontype = None
+    dbConfPath =  r"/etc/cloudstack/management"
+    dbFilesPath = r"/usr/share/cloudstack-management/setup/"
+    dbDotProperties = {}
+    dbDotPropertiesIndex = 0
+    success = False
+    magicString = 'This_is_a_magic_string_i_think_no_one_will_duplicate'
+    tmpMysqlFile = os.path.join(os.path.expanduser('~/'), 'cloudstackmysql.tmp.sql')
+    mysqlBinPath = None
+
+    def postRun(self):
+        if os.path.exists(self.tmpMysqlFile):
+            os.remove(self.tmpMysqlFile)
+
+    def info(self, msg, result=None):
+        output = ""
+        if msg is not None:
+            output = "%-80s"%msg
+
+        if result is True:
+            output += "[ \033[92m%-2s\033[0m ]\n"%"OK"
+        elif result is False:
+            output += "[ \033[91m%-6s\033[0m ]\n"%"FAILED"
+        sys.stdout.write(output)
+        sys.stdout.flush()
+
+    def debug(self, msg):
+        msg = "DEBUG:%s"%msg
+        sys.stdout.write(msg)
+        sys.stdout.flush()
+
+    def putDbProperty(self, key, value):
+        if self.dbDotProperties.has_key(key):
+            (oldValue, index) = self.dbDotProperties[key]
+            self.dbDotProperties[key] = (value, index)
+        else:
+            self.dbDotProperties[key] = (value, self.dbDotPropertiesIndex)
+            self.dbDotPropertiesIndex += 1
+
+    def getDbProperty(self, key):
+        if not self.dbDotProperties.has_key(key):
+            return None
+        (value, index) = self.dbDotProperties[key]
+        return value
+
+    def runMysql(self, text, table, isRoot=False):
+        kwargs = {}
+        if not isRoot:
+            kwargs['user'] = self.user
+            if self.password != '': kwargs['passwd'] = self.password
+        else:
+            kwargs['user'] = self.rootuser
+            if self.rootpassword != '': kwargs['passwd'] = self.rootpassword
+
+        kwargs['port'] = self.port
+        kwargs['host'] = self.host
+        if self.mysqlBinPath is not None:
+          mysqlPath = '"' + self.mysqlBinPath + os.sep + "mysql" + '"'
+        else:
+          mysqlPath = "mysql"
+        try:
+            mysqlCmds = [mysqlPath, '--user=%s'%kwargs['user'], '--host=%s'%kwargs['host'], '--port=%s'%kwargs['port']]
+            if kwargs.has_key('passwd'):
+                mysqlCmds.append('--password=%s'%kwargs['passwd'])
+            file(self.tmpMysqlFile, 'w').write(text)
+            mysqlCmds.append('<')
+            mysqlCmds.append(self.tmpMysqlFile)
+            runCmd(mysqlCmds)
+
+        except Exception, e:
+            err = '''Encountering an error when executing mysql script
+----------------------------------------------------------------------
+table:
+%s
+
+Error:
+%s
+
+Sql parameters:
+%s
+----------------------------------------------------------------------
+            '''%(table, e.__str__(), kwargs)
+            self.errorAndExit(err)
+
+    def errorAndContinue(self, msg):
+        sys.stderr.write(msg)
+        sys.stderr.flush()
+
+    def errorAndExit(self, msg):
+        self.postRun()
+        err = '''\n\nWe apologize for below error:
+***************************************************************
+%s
+***************************************************************
+Please run:
+
+    cloud-setup-database -h
+
+for full help
+''' % msg
+        sys.stderr.write(err)
+        sys.stderr.flush()
+        sys.exit(1)
+
+    def setupDBSchema(self):
+
+        replacements = (
+                ("CREATE USER cloud identified by 'cloud';",
+                    "CREATE USER %s@`localhost` identified by '%s'; CREATE USER %s@`%%` identified by '%s';"%(
+                            (self.user,self.password,self.user,self.password)
+                        )),
+                ("cloud identified by 'cloud';",
+                    "%s identified by '%s';"%(self.user,self.password)),
+                ("cloud@`localhost` identified by 'cloud'",
+                    "%s@`localhost` identified by '%s'"%(self.user,self.password)),
+                ("cloud@`%` identified by 'cloud'",
+                    "%s@`%%` identified by '%s'"%(self.user,self.password)),
+                ("to cloud@`localhost`",
+                    "to %s@`localhost`"%self.user),
+                ("to cloud@`%`",
+                    "to %s@`%%`"%self.user),
+                ("TO cloud@`localhost`",
+                    "to %s@`localhost`"%self.user),
+                ("TO cloud@`%`",
+                    "to %s@`%%`"%self.user),
+                ("WHERE `User` = 'cloud' and host =",
+                    "WHERE `User` = '%s' and host ="%self.user),
+                ("DROP USER 'cloud'",
+                    "DROP USER '%s'"%self.user),
+                ("CALL `test`.`drop_user_if_exists`() ;",
+                    ""),
+            )
+
+        for f in ["create-schema-ccs", "ccs-templates"]:
+            p = os.path.join(self.dbFilesPath,"%s.sql"%f)
+            if not os.path.exists(p): continue
+            text = file(p).read()
+            for t, r in replacements: text = text.replace(t,r)
+            self.info("Applying %s"%p)
+            self.runMysql(text, p, False)
+            self.info(None, True)
+
+    def finalize(self):
+        def finalizeDbProperties():
+            entries = []
+            for key in self.dbDotProperties.keys():
+                (value, index) = self.dbDotProperties[key]
+                if key.startswith("#"):
+                    entries.insert(index, key)
+                elif key.startswith(self.magicString):
+                    entries.insert(index, '')
+                else:
+                    entries.insert(index, "%s=%s"%(key, value))
+            file(os.path.join(self.dbConfPath, 'db.properties'), 'w').write('\n'.join(entries))
+
+        self.info("Finalizing setup ...", None)
+        #finalizeDbProperties()
+        self.info(None, True)
+        self.success = True # At here, we have done successfully and nothing more after this flag is set
+
+    def grabSystemInfo(self):
+        def getIpAddr():
+            try:
+                ip = socket.gethostbyname(socket.gethostname())
+                return ip
+            except Exception, e:
+                return "127.0.0.1"
+
+        if not self.ip:
+            self.ip = getIpAddr()
+            self.info("Detected local IP address as %s, will use as cluster management server node IP" % self.ip, True)
+
+    def checkSystemSetup(self):
+        def checkCloudDbFiles():
+            self.info("Checking Cloud database files ...", None)
+
+            coreSchemas = ['create-schema-ccs.sql', 'templates.sql']
+
+            checkingList = [os.path.join(self.dbFilesPath, x) for x in coreSchemas]
+            for f in checkingList:
+                if not os.path.isfile(f):
+                    self.errorAndExit("Cloud DB required file %s was not found"%f)
+            self.info(None, True)
+
+        def checkDbserverHostname():
+            self.info("Checking mysql server hostname ...", None)
+            if resolves_to_ipv6(self, self.port):
+                err = "%s resolves to an IPv6 address.  The CloudStack does not support IPv6 yet.\nPlease fix this issue in either /etc/hosts or your DNS configuration.\n"%self.host
+                self.errorAndExit(err)
+            self.info(None, True)
+
+        def checkHostName():
+            self.info("Checking local machine hostname ...", None)
+            try:
+                output= socket.getfqdn()
+            except Exception, e:
+                err = "The host name of this computer does not resolve to an IP address.\nPlease use your operating system's network setup tools to fix this ('hostname --fqdn' %s).\n"%e.__str__()
+                self.errorAndExit(err)
+            self.info(None, True)
+
+        checkCloudDbFiles()
+        checkHostName()
+
+    def parseOptions(self):
+        def parseUserAndHostInfo():
+            def parseHostInfo(info):
+                stuff = info.split(":")
+                if len(stuff) == 1:
+                    host = stuff[0]
+                    port = 3306
+                elif len(stuff) == 2:
+                    host = stuff[0]
+                    try: port = int(stuff[1])
+                    except ValueError: self.errorAndExit("The database port must be an integer (%s)"%stuff[1])
+                    if port < 1: self.errorAndExit("The database port must be a positive integer (%s)"%stuff[1])
+                else:
+                    self.errorAndExit("Invalid host and port format, it must be in format of host:port (%s)"%info)
+                return host, port
+
+            if len(self.args) == 0:
+                self.errorAndExit("Please specify user:password@hostname")
+            if len(self.args) > 1:
+                self.errorAndExit("There are more than one parameters for user:password@hostname (%s)"%self.args)
+
+            arg = self.args[0]
+            try:
+                try:
+                    splitIndex = arg.rindex('@')
+                except ValueError:
+                    # If it failed to find @, use host=localhost
+                    splitIndex = len(arg)
+                    arg += "@localhost"
+            finally:
+                stuff = [arg[:splitIndex], arg[splitIndex+1:]]
+
+            self.user,self.password = parseUserAndPassword(stuff[0])
+            self.host,self.port = parseHostInfo(stuff[1])
+
+            self.info("Mysql user name:%s"%self.user, True)
+            self.info("Mysql user password:%s"%"******", True)
+            self.info("Mysql server ip:%s"%self.host, True)
+            self.info("Mysql server port:%s"%self.port, True)
+
+        def parseUserAndPassword(cred):
+            stuff = cred.split(':')
+            if len(stuff) != 1 and len(stuff) != 2:
+                self.errorAndExit("Invalid user name and password format, must be in format of user:password (%s)"%cred)
+            user = stuff[0]
+            if len(user) < 1:
+                self.errorAndExit("Invalid user name and password format, must be in format of user:password, user name can not be empty")
+            if len(stuff) == 1:
+                password = ''
+            else:
+                password = stuff[1]
+
+            forbidden = "' \\`"
+            for f in forbidden:
+                if f in user: self.errorAndExit("User name cannot have the %r characters"%f)
+                if f in password: self.errorAndExit("Password cannot have the %r characters"%f)
+            return user, password
+
+
+    #---------------------- option parsing and command line checks ------------------------
+        usage = """%prog user:[password]@mysqlhost:[port]"""
+        self.parser = OptionParser(usage=usage)
+        (self.options, self.args) = self.parser.parse_args()
+        parseUserAndHostInfo()
+
+    def run(self):
+        try:
+            self.parseOptions()
+            self.checkSystemSetup()
+            self.grabSystemInfo()
+            self.setupDBSchema()
+            self.finalize()
+        finally:
+            self.postRun()
+
+        print ''
+        print "CloudStack Container Service database has been successfully initialized"
+        print ''
+
+if __name__ == "__main__":
+   o = DBDeployer()
+   o.run()
