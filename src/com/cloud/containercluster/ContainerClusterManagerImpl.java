@@ -214,7 +214,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
         }
 
-        if (isContainerServiceConfigured(zone)) {
+        if (!isContainerServiceConfigured(zone)) {
             throw new ManagementServerException("Container service has not been configured properly to provision clusters.");
         }
 

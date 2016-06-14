@@ -58,6 +58,19 @@ INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'manag
 
 INSERT IGNORE INTO `network_offerings` (name, uuid, unique_name, display_text, nw_rate, mc_rate, traffic_type, tags, system_only, specify_vlan, service_offering_id, conserve_mode, created,availability, dedicated_lb_service, shared_source_nat_service, sort_key, redundant_router_service, state, guest_type, elastic_ip_service, eip_associate_public_ip, elastic_lb_service, specify_ip_ranges, inline,is_persistent,internal_lb, public_lb, egress_default_policy, concurrent_connections, keep_alive_enabled, supports_streched_l2, `default`) VALUES ('DefaultNetworkOfferingforContainerService', UUID(), 'DefaultNetworkOfferingforContainerService', 'Network Offering used for CloudStack container service', NULL,NULL,'Guest',NULL,0,0,NULL,1,now(),'Required',1,0,0,0,'Enabled','Isolated',0,1,0,0,0,0,0,1,1,NULL,0,0, 1);
 
+SET @ccsntwk = (select id from network_offerings where name='DefaultNetworkOfferingforContainerService');
+
+INSERT IGNORE INTO ntwk_offering_service_map (network_offering_id, service, provider, created) VALUES (@ccsntwk, 'Dhcp','VirtualRouter',now());
+INSERT IGNORE INTO ntwk_offering_service_map (network_offering_id, service, provider, created) VALUES (@ccsntwk, 'Dns','VirtualRouter',now());
+INSERT IGNORE INTO ntwk_offering_service_map (network_offering_id, service, provider, created) VALUES (@ccsntwk, 'Firewall','VirtualRouter',now());
+INSERT IGNORE INTO ntwk_offering_service_map (network_offering_id, service, provider, created) VALUES (@ccsntwk, 'Gateway','VirtualRouter',now());
+INSERT IGNORE INTO ntwk_offering_service_map (network_offering_id, service, provider, created) VALUES (@ccsntwk, 'Lb','VirtualRouter',now());
+INSERT IGNORE INTO ntwk_offering_service_map (network_offering_id, service, provider, created) VALUES (@ccsntwk, 'PortForwarding','VirtualRouter',now());
+INSERT IGNORE INTO ntwk_offering_service_map (network_offering_id, service, provider, created) VALUES (@ccsntwk, 'SourceNat','VirtualRouter',now());
+INSERT IGNORE INTO ntwk_offering_service_map (network_offering_id, service, provider, created) VALUES (@ccsntwk, 'StaticNat','VirtualRouter',now());
+INSERT IGNORE INTO ntwk_offering_service_map (network_offering_id, service, provider, created) VALUES (@ccsntwk, 'UserData','VirtualRouter',now());
+INSERT IGNORE INTO ntwk_offering_service_map (network_offering_id, service, provider, created) VALUES (@ccsntwk, 'Vpn','VirtualRouter',now());
+
 INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'management-server',
 'cloud.container.cluster.network.offering', 'DefaultNetworkOfferingforContainerService' , 'Network Offering used for CloudStack container service', 'DefaultNetworkOfferingforContainerService', NULL , NULL, 0);
 

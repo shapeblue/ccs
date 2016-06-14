@@ -11,3 +11,7 @@ DELETE FROM `cloud`.`configuration` WHERE name='cloud.container.cluster.node.clo
 DELETE FROM `cloud`.`configuration` WHERE name='cloud.container.cluster.network.offering';
 
 DELETE FROM `cloud`.`network_offerings` WHERE name='DefaultNetworkOfferingforContainerService';
+
+SET @ccsntwk = (select id from network_offerings where name='DefaultNetworkOfferingforContainerService');
+
+DELETE FROM `cloud`.`ntwk_offering_service_map` where  network_offering_id=@ccsntwk;
