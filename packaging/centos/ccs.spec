@@ -104,7 +104,8 @@ fi
 %{_datadir}/%{name}-management/setup/*.sql
 %{_sysconfdir}/%{name}/management/*.yml
 %{_bindir}/ccs-setup-database
-
+%{_bindir}/ccs-cleanup-database
+%{_bindir}/ccs-template-install
 %changelog
 * Fri Jun 03 2016 ShapeBlue <enginering@shapeblue.com> 1.0.0
 - CloudStack Container Service Plugin

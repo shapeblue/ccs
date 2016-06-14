@@ -1,7 +1,7 @@
 
 use cloud;
 
-CREATE TABLE IF NOT EXISTS `cloud`.`container_cluster` (
+CREATE TABLE IF NOT EXISTS `cloud`.`sb_ccs_container_cluster` (
     `id` bigint unsigned NOT NULL auto_increment COMMENT 'id',
     `uuid` varchar(40),
     `name` varchar(255) NOT NULL,
@@ -28,27 +28,27 @@ CREATE TABLE IF NOT EXISTS `cloud`.`container_cluster` (
     PRIMARY KEY(`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-CREATE TABLE IF NOT EXISTS `cloud`.`container_cluster_vm_map` (
+CREATE TABLE IF NOT EXISTS `cloud`.`sb_ccs_container_cluster_vm_map` (
     `id` bigint unsigned NOT NULL auto_increment COMMENT 'id',
     `cluster_id` bigint unsigned NOT NULL COMMENT 'cluster id',
     `vm_id` bigint unsigned NOT NULL COMMENT 'vm id',
 
     PRIMARY KEY(`id`),
-    CONSTRAINT `container_cluster_vm_map_cluster__id` FOREIGN KEY `container_cluster_vm_map_cluster__id`(`cluster_id`) REFERENCES `container_cluster`(`id`) ON DELETE CASCADE
+    CONSTRAINT `container_cluster_vm_map_cluster__id` FOREIGN KEY `container_cluster_vm_map_cluster__id`(`cluster_id`) REFERENCES `sb_ccs_container_cluster`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-CREATE TABLE IF NOT EXISTS `cloud`.`container_cluster_details` (
+CREATE TABLE IF NOT EXISTS `cloud`.`sb_ccs_container_cluster_details` (
     `id` bigint unsigned NOT NULL auto_increment COMMENT 'id',
     `cluster_id` bigint unsigned NOT NULL COMMENT 'cluster id',
     `username` varchar(255) NOT NULL,
     `password` varchar(255) NOT NULL,
 
     PRIMARY KEY(`id`),
-    CONSTRAINT `container_cluster_details_cluster__id` FOREIGN KEY `container_cluster_details_cluster__id`(`cluster_id`) REFERENCES `container_cluster`(`id`) ON DELETE CASCADE
+    CONSTRAINT `container_cluster_details_cluster__id` FOREIGN KEY `container_cluster_details_cluster__id`(`cluster_id`) REFERENCES `sb_ccs_container_cluster`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'management-server',
-'cloud.container.cluster.template.name', "CCS Template KVM", 'template name', '-1', NULL, NULL, 0);
+'cloud.container.cluster.template.name', "ShapeBlue-CCS-Template", 'template name', '-1', NULL, NULL, 0);
 
 INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'management-server',
 'cloud.container.cluster.master.cloudconfig', '/etc/cloudstack/management/k8s-master.yml' , 'file location path of the cloud config used for creating container cluster master node', '/etc/cloudstack/management/k8s-master.yml', NULL , NULL, 0);
@@ -56,8 +56,19 @@ INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'manag
 INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'management-server',
 'cloud.container.cluster.node.cloudconfig', '/etc/cloudstack/management/k8s-node.yml', 'file location path of the cloud config used for creating container cluster node', '/etc/cloudstack/management/k8s-node.yml', NULL , NULL, 0);
 
-INSERT IGNORE INTO `network_offerings` (name, uuid, unique_name, display_text, nw_rate, mc_rate, traffic_type, tags, system_only, specify_vlan, service_offering_id, conserve_mode, created,availability, dedicated_lb_service, shared_source_nat_service, sort_key, redundant_router_service, state, guest_type, elastic_ip_service, eip_associate_public_ip, elastic_lb_service, specify_ip_ranges, inline,is_persistent,internal_lb, public_lb, egress_default_policy, concurrent_connections, keep_alive_enabled, supports_streched_l2) VALUES ('DefaultNetworkOfferingforContainerService', UUID(), 'DefaultNetworkOfferingforContainerService', 'Network Offering used for CloudStack container service', NULL,NULL,'Guest',NULL,0,0,NULL,1,now(),'Required',1,0,0,0,'Enabled','Isolated',0,1,0,0,0,0,0,1,1,NULL,0,0);
+INSERT IGNORE INTO `network_offerings` (name, uuid, unique_name, display_text, nw_rate, mc_rate, traffic_type, tags, system_only, specify_vlan, service_offering_id, conserve_mode, created,availability, dedicated_lb_service, shared_source_nat_service, sort_key, redundant_router_service, state, guest_type, elastic_ip_service, eip_associate_public_ip, elastic_lb_service, specify_ip_ranges, inline,is_persistent,internal_lb, public_lb, egress_default_policy, concurrent_connections, keep_alive_enabled, supports_streched_l2, `default`) VALUES ('DefaultNetworkOfferingforContainerService', UUID(), 'DefaultNetworkOfferingforContainerService', 'Network Offering used for CloudStack container service', NULL,NULL,'Guest',NULL,0,0,NULL,1,now(),'Required',1,0,0,0,'Enabled','Isolated',0,1,0,0,0,0,0,1,1,NULL,0,0, 1);
 
 INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'management-server',
 'cloud.container.cluster.network.offering', 'DefaultNetworkOfferingforContainerService' , 'Network Offering used for CloudStack container service', 'DefaultNetworkOfferingforContainerService', NULL , NULL, 0);
+
+CREATE TABLE IF NOT EXISTS `cloud`.`sb_ccs_version` (
+     `id` bigint unsigned NOT NULL UNIQUE AUTO_INCREMENT COMMENT 'id',
+     `version` char(40) NOT NULL UNIQUE COMMENT 'version',
+     `updated` datetime NOT NULL COMMENT 'Date this version table was updated',
+     `step` char(32) NOT NULL COMMENT 'Step in the upgrade to this version',
+     PRIMARY KEY (`id`),
+     INDEX `i_version__version`(`version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+INSERT IGNORE INTO `cloud`.`sb_ccs_version` (version, updated, step) VALUES ('1.0', now(), 'Complete');
 

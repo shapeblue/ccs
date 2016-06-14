@@ -26,7 +26,7 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 
 @Entity
-@Table(name = "container_cluster_details")
+@Table(name = "sb_ccs_container_cluster_details")
 public class ContainerClusterDetailsVO implements ContainerClusterDetails {
 
     @Override
