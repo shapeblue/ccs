@@ -79,16 +79,16 @@ class CloudStack(SignedAPICall):
         return json.loads(data)[key]
 
 
-usage = """%prog format hypervisor url extractable zoneid
+usage = """ccs-template-install -f format -h hypervisor -u url -e -z zoneid
 
 Registers a template of the given format and for the given hypervisor available at specified url with CloudStack. If template at url is extractable set --extractable to true"""
 
 parser = argparse.ArgumentParser()
-parser.add_argument("format", help="Template image format" )
-parser.add_argument("hypervisor", help="Hypervisor type")
-parser.add_argument("url", help=" A valid url at which template is available")
-parser.add_argument("extractable", help="if template is extractable")
-parser.add_argument("zoneid", help="zoneid in which template is to be installed")
+parser.add_argument("-f", "--format", dest="format", help="Template image format", required=True )
+parser.add_argument("-m", "--hypervisor", dest="hypervisor", help="Hypervisor type", required=True)
+parser.add_argument("-u", "--url", help="A valid url at which template is available", required=True)
+parser.add_argument("-e", "--extractable", action="store_true", dest="extractable", help="if template is extractable", default=False)
+parser.add_argument("-z", "--zoneid", help="zoneid in which template is to be installed", required=True)
 
 args = parser.parse_args()
 
@@ -105,10 +105,6 @@ if args.hypervisor not in hypervisors:
 
 if not checkUrl(args.url):
     print "Invalid or not reachable url"
-    exit(1)
-
-if args.extractable not in ('true', 'false'):
-    print "extractable should be either true of false"
     exit(1)
 
 try:

@@ -6,7 +6,7 @@ import sys
 import subprocess
 from random import choice
 import string
-from optparse import OptionParser
+import argparse
 import commands
 import getpass
 
@@ -23,7 +23,6 @@ def runCmd(cmds):
 
 class CcsDBDeployer(object):
     parser = None
-    options = None
     args = None
     user,password,host,port = [None,None,None,None]
     dbConfPath =  r"/etc/cloudstack/management"
@@ -49,7 +48,7 @@ class CcsDBDeployer(object):
         sys.stdout.flush()
 
     def debug(self, msg):
-        if not self.options.debug:
+        if not self.args.debug:
             return
         msg = "DEBUG:%s"%msg
         sys.stdout.write(msg + "\n")
@@ -205,19 +204,16 @@ for full help
                     if f in password: self.errorAndExit("Password cannot have the %r characters"%f)
                 return user, password
 
-            if len(self.args) != 0:
-                self.errorAndExit("Invalid arguments were specified")
-
-            if self.options.creds:
+            if self.args.creds:
                 try:
                     try:
-                        splitIndex = self.options.creds.rindex('@')
+                        splitIndex = self.args.creds.rindex('@')
                     except ValueError:
                         # If it failed to find @, use host=localhost
-                        splitIndex = len(arg)
-                        arg += "@localhost"
+                        splitIndex = len(self.args.creds)
+                        self.args.creds += "@localhost"
                 finally:
-                    stuff = [self.options.creds[:splitIndex], self.options.creds[splitIndex+1:]]
+                    stuff = [self.args.creds[:splitIndex], self.args.creds[splitIndex+1:]]
 
                 self.user,self.password = parseUserAndPassword(stuff[0])
                 self.host,self.port = parseHostInfo(stuff[1])
@@ -234,16 +230,15 @@ for full help
             self.debug("    Mysql server port:%s"%self.port)
 
     #---------------------- option parsing and command line checks ------------------------
-        usage = """%prog [-h] [-v] [--deploy-as user:[password]@mysqlhost:[port]]
+        description = """ccs-setup-database [-h] [-v] [--deploy-as user:[password]@mysqlhost:[port]]
 
 This script sets up the database for ShapeBlue CloudStack Container Service. For execution of the script 'cloud' user credentials are required. Also the host and port details of the MySql server are required. Script can be executed with no arguments, in which case username, password, mysql host and port details will be asked for interactivley. Alternativley user can pass the details in the format of user:[password]@mysqlhost:[port] to the script. 
         """
-        self.parser = OptionParser(usage=usage)
-        self.parser.add_option("-v", "--debug", action="store_true", dest="debug", default=False,
-                           help="If enabled, print the commands it will run as they run")
-        self.parser.add_option("-d", "--deploy-as", action="store", type="string", dest="creds", default="",
-                           help="Credentials for 'cloud' database and MySql host details in the format user:[password]@mysqlhost:[port]")
-        (self.options, self.args) = self.parser.parse_args()
+        self.parser = argparse.ArgumentParser(description=description)
+        self.parser.add_argument("-v", "--debug", action='store_true',  help="If enabled, print the commands it will run as they run", dest='debug', default=False)
+        self.parser.add_argument("-d", "--deploy-as", dest="creds", default="", 
+                help="Credentials for 'cloud' database and MySql host details in the format user:[password]@mysqlhost:[port]", required=False)
+        self.args = self.parser.parse_args()
         parseUserAndHostInfo()
 
     def run(self):
