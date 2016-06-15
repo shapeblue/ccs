@@ -107,6 +107,11 @@ if not checkUrl(args.url):
     print "Invalid or not reachable url"
     exit(1)
 
+if args.extractable is True:
+    args.extractable = "true"
+else:
+    args.extractable = "false"
+
 try:
     UUID(args.zoneid, version=4)
 except:
