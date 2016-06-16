@@ -221,11 +221,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         // user has not specified network in which cluster VM's to be provisioned, so create a network for container cluster
         if (networkId == null) {
             NetworkOfferingVO networkOffering = _networkOfferingDao.findByUniqueName(
-                    _globalConfigDao.getValue(CcsConfig.ContainerClusterNetworkOffering.key()));  
+                    _globalConfigDao.getValue(CcsConfig.ContainerClusterNetworkOffering.key()));
 
-            long physicalNetworkId = _networkModel.findPhysicalNetworkId(zone.getId(), networkOffering.getTags(), 
+            long physicalNetworkId = _networkModel.findPhysicalNetworkId(zone.getId(), networkOffering.getTags(),
                     networkOffering.getTrafficType());
-            PhysicalNetwork physicalNetwork = _physicalNetworkDao.findById(physicalNetworkId);    
+            PhysicalNetwork physicalNetwork = _physicalNetworkDao.findById(physicalNetworkId);
 
             if (s_logger.isDebugEnabled()) {
                 s_logger.debug("Creating network for account " + owner + " from the network offering id=" +
@@ -242,7 +242,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         }
 
         final Network defaultNetwork = network;
-        final VMTemplateVO template = _templateDao.findByTemplateName(_globalConfigDao.getValue(CcsConfig.ContainerClusterTemplateName.key())); 
+        final VMTemplateVO template = _templateDao.findByTemplateName(_globalConfigDao.getValue(CcsConfig.ContainerClusterTemplateName.key()));
         final long cores = serviceOffering.getCpu() * clusterSize;
         final long memory = serviceOffering.getRamSize() * clusterSize;
 
@@ -257,7 +257,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
         });
 
-        if (s_logger.isDebugEnabled()) { 
+        if (s_logger.isDebugEnabled()) {
             s_logger.debug("A container cluster with id " + cluster.getId() + " has been created.");
         }
 
@@ -336,7 +336,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 }
             } catch (Exception e) {
                 updateContainerClusterState(containerClusterId, "Error");
-                s_logger.warn("Provisioning the node VM failed in the container cluster " + containerCluster.getName() + " due to " + e); 
+                s_logger.warn("Provisioning the node VM failed in the container cluster " + containerCluster.getName() + " due to " + e);
                 throw new ManagementServerException("Provisioning the node VM failed in the container cluster " + containerCluster.getName());
             }
 
@@ -396,7 +396,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             _firewallService.createIngressFirewallRule(rule);
             _firewallService.applyIngressFwRules(publicIp.getId(), account);
 
-            if (s_logger.isDebugEnabled()) { 
+            if (s_logger.isDebugEnabled()) {
                 s_logger.debug("Provisioned firewall rule to open up port 443 on " + publicIp.getAddress() +
                         " for cluster " + containerCluster.getName());
             }
@@ -434,8 +434,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             });
             _rulesService.applyPortForwardingRules(publicIp.getId(), account);
 
-            if (s_logger.isDebugEnabled()) { 
-                s_logger.debug("Provisioning port forwarding rule from port 443 on " + publicIp.getAddress() + 
+            if (s_logger.isDebugEnabled()) {
+                s_logger.debug("Provisioning port forwarding rule from port 443 on " + publicIp.getAddress() +
                         " to the master VM IP :" + masterIpFinal + " in container cluster " + containerCluster.getName());
             }
         } catch (Exception e) {
@@ -518,7 +518,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         // and let garbage collector clean container cluster in other states
         if (!cluster.getState().equals("Running")) {
             s_logger.debug("Cannot perform this operation, cluster " + cluster.getName() + " is not in running state");
-            throw new PermissionDeniedException("Cannot perform this operation, cluster " + cluster.getName() + " is not in running state");  
+            throw new PermissionDeniedException("Cannot perform this operation, cluster " + cluster.getName() + " is not in running state");
         }
 
         cluster.setState("Deleting");

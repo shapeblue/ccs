@@ -47,7 +47,7 @@ public class ListContainerClusterCmd extends BaseListCmd {
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
     /////////////////////////////////////////////////////
-    @Parameter(name = ApiConstants.ID, type = CommandType.UUID, 
+    @Parameter(name = ApiConstants.ID, type = CommandType.UUID,
             entityType = ContainerClusterResponse.class,
             description = "the ID of the container cluster")
     private Long id;

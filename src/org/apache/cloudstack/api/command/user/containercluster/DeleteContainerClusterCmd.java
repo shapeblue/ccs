@@ -19,7 +19,7 @@ package org.apache.cloudstack.api.command.user.containercluster;
 
 import javax.inject.Inject;
 
-import com.cloud.containercluster.ContainerCluster; 
+import com.cloud.containercluster.ContainerCluster;
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.InsufficientCapacityException;
 import com.cloud.exception.NetworkRuleConflictException;
@@ -39,7 +39,7 @@ import com.cloud.containercluster.ContainerClusterService;
 import org.apache.log4j.Logger;
 
 @APICommand(name = "deleteContainerCluster",
-        description = "deletes a container cluster", 
+        description = "deletes a container cluster",
         responseObject = SuccessResponse.class,
         entityType = {ContainerCluster.class},
         authorized = {RoleType.Admin, RoleType.DomainAdmin, RoleType.User})
