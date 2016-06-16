@@ -21,7 +21,7 @@ function package_rpm() {
         DEFREL="-D_rel 1"
     fi
 
-    echo Preparing to package Apache CloudStack CCS ${VERSION}
+    echo Preparing to package ShapeBlue CloudStack CCS ${VERSION}
 
     mkdir -p $RPMDIR/SPECS
     mkdir -p $RPMDIR/BUILD
