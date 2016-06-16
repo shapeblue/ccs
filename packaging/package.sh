@@ -47,5 +47,8 @@ function package_rpm() {
     exit
 }
 
+ROOT=$PWD
+cd $ROOT/../deps && bash -x install.sh && cd $ROOT
+
 package_deb
 package_rpm

@@ -25,7 +25,17 @@
 
   <properties>
     <jdk.version>1.7</jdk.version>
-    <acs.version>4.5.3-SNAPSHOT</acs.version>
+    <acs.version>4.5.2</acs.version>
+    <cs.jpa.version>2.0.0</cs.jpa.version>
+    <cs.ejb.version>3.0</cs.ejb.version>
+    <cs.gson.version>1.7.2</cs.gson.version>
+    <cs.guava.version>14.0-rc1</cs.guava.version>
+    <cs.log4j.version>1.2.16</cs.log4j.version>
+    <cs.log4j.extras.version>1.1</cs.log4j.extras.version>
+    <org.springframework.version>3.2.4.RELEASE</org.springframework.version>
+    <cs.codec.version>1.6</cs.codec.version>
+
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
   <build>
@@ -132,13 +142,78 @@
     </dependency>
     <dependency>
       <groupId>org.apache.cloudstack</groupId>
+      <artifactId>cloud-framework-db</artifactId>
+      <version>${acs.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.cloudstack</groupId>
       <artifactId>cloud-engine-schema</artifactId>
+      <version>${acs.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.cloudstack</groupId>
+      <artifactId>cloud-engine-api</artifactId>
+      <version>${acs.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.cloudstack</groupId>
+      <artifactId>cloud-engine-components-api</artifactId>
       <version>${acs.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.cloudstack</groupId>
       <artifactId>cloud-server</artifactId>
       <version>${acs.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.persistence</groupId>
+      <artifactId>javax.persistence</artifactId>
+      <version>${cs.jpa.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>javax.inject</groupId>
+      <artifactId>javax.inject</artifactId>
+      <version>1</version>
+    </dependency>
+    <dependency>
+      <groupId>javax.ejb</groupId>
+      <artifactId>ejb-api</artifactId>
+      <version>${cs.ejb.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.code.gson</groupId>
+      <artifactId>gson</artifactId>
+      <version>${cs.gson.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>${cs.guava.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>log4j</groupId>
+      <artifactId>log4j</artifactId>
+      <version>${cs.log4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-context</artifactId>
+      <version>${org.springframework.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-aop</artifactId>
+      <version>${org.springframework.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-beans</artifactId>
+      <version>${org.springframework.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>commons-codec</groupId>
+      <artifactId>commons-codec</artifactId>
+      <version>${cs.codec.version}</version>
     </dependency>
   </dependencies>
 
