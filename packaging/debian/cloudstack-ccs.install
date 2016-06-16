@@ -1,2 +1,3 @@
 /usr/share/cloudstack-management/*
 /etc/cloudstack/management/*
+/usr/bin/*

@@ -15,6 +15,7 @@ VERSION := $(shell cat ../pom.xml | sed '24!d' | cut -d'>' -f2 | cut -d'<' -f1)
 MVNADD := $(shell if echo '$(DEBVERS)' | grep -q snapshot; then echo ; fi )
 PACKAGE = $(shell dh_listpackages|head -n 1|cut -d '-' -f 1)
 SYSCONFDIR = "/etc"
+USRBINDIR = "/usr/bin"
 DESTDIR = "debian/tmp"
 
 # Uncomment this to turn on verbose mode.
@@ -49,6 +50,7 @@ install:
 	# Common packages
 	mkdir -p $(DESTDIR)/$(SYSCONFDIR)/$(PACKAGE)
 	mkdir -p $(DESTDIR)/usr/share
+	mkdir -p $(DESTDIR)/usr/bin
 
 	# cloudstack-ccs
 	mkdir $(DESTDIR)/$(SYSCONFDIR)/$(PACKAGE)/management
@@ -59,6 +61,7 @@ install:
 	cp -r ../../../ui/plugins/ccs $(DESTDIR)/usr/share/$(PACKAGE)-management/webapps/client/plugins/
 	cp -r ../schema/* $(DESTDIR)/usr/share/$(PACKAGE)-management/setup/
 	cp -r ../conf/* $(DESTDIR)/$(SYSCONFDIR)/$(PACKAGE)/management/
+	cp -r ../setup/* $(DESTDIR)/$(USRBINDIR)/
 
 	dh_installdirs
 	dh_install
