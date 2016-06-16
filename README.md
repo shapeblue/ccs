@@ -5,7 +5,8 @@ Start by adding the following remote to your CloudStack repo:
     git remote add -f sbccs git@github.com:shapeblue/ccs.git
 
 Note: run all the git subtree commands from the parent git repository's root
-directory and not from plugins or plugins/ccs directory.
+directory and not from plugins or plugins/ccs directory. The `git subtree`
+commands need to only run when you're in the parent repo (cloudstack-kubernetes).
 
 If you're not using cloudstack-kubernetes repo (ccs branch) you can start by adding
 the plugin to plugins directory:
