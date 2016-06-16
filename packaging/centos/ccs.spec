@@ -55,7 +55,7 @@ mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
 mkdir -p ${RPM_BUILD_ROOT}%{_bindir}/
 
 cp -r target/cloud-plugin-ccs-%{_maventag}.jar ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib/
-cp -r ../../../../../../ui/plugins/ccs ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/plugins/
+cp -r ../../../../ui/plugins/ccs ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/plugins/
 cp -r ../../../../schema/* ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup/
 cp -r ../../../../conf/* ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
 cp -r ../../../../setup/* ${RPM_BUILD_ROOT}%{_bindir}/
