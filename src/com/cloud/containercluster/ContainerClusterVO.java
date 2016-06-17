@@ -149,11 +149,11 @@ public class ContainerClusterVO implements ContainerCluster {
     }
 
     @Override
-    public String getState() {
+    public State getState() {
         return state;
     }
 
-    public void setState(String state) {
+    public void setState(State state) {
         this.state = state;
     }
 
@@ -163,7 +163,7 @@ public class ContainerClusterVO implements ContainerCluster {
     }
 
     public void setEndpoint(String endpoint) {
-        this.state = endpoint;
+        this.endpoint = endpoint;
     }
 
     public String getKeyPair() {
@@ -225,7 +225,7 @@ public class ContainerClusterVO implements ContainerCluster {
     long memory;
 
     @Column(name = "state")
-    String state;
+    State  state;
 
     @Column(name = "key_pair")
     String keyPair;
@@ -242,7 +242,7 @@ public class ContainerClusterVO implements ContainerCluster {
     }
 
     public ContainerClusterVO(String name, String description, long zoneId, long serviceOfferingId, long templateId,
-                               long networkId, long domainId, long accountId, long nodeCount, String state,
+                               long networkId, long domainId, long accountId, long nodeCount, State state,
                               String keyPair, long cores, long memory, String endpoint, String consoleEndpoint) {
         this.uuid = UUID.randomUUID().toString();
         this.name = name;

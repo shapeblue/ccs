@@ -79,6 +79,8 @@ import com.cloud.offering.ServiceOffering;
 import com.cloud.template.VirtualMachineTemplate;
 import com.cloud.user.Account;
 import com.cloud.utils.component.ManagerBase;
+import com.cloud.utils.fsm.StateMachine2;
+import com.cloud.utils.fsm.NoTransitionException;
 import org.apache.cloudstack.acl.ControlledEntity;
 import org.apache.cloudstack.acl.SecurityChecker;
 import org.apache.cloudstack.api.ApiErrorCode;
@@ -94,8 +96,8 @@ import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
-import org.apache.log4j.Logger;
 
+import org.apache.log4j.Logger;
 import javax.ejb.Local;
 import javax.inject.Inject;
 import java.io.BufferedReader;
@@ -120,6 +122,8 @@ import org.apache.commons.codec.binary.Base64;
 public class ContainerClusterManagerImpl extends ManagerBase implements ContainerClusterManager, ContainerClusterService {
 
     private static final Logger s_logger = Logger.getLogger(ContainerClusterManagerImpl.class);
+
+    protected StateMachine2<ContainerCluster.State, ContainerCluster.Event, ContainerCluster> _stateMachine = ContainerCluster.State.getStateMachine();
 
     @Inject
     ContainerClusterDao _containerClusterDao;
@@ -251,7 +255,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             public ContainerClusterVO doInTransaction(TransactionStatus status) {
                 ContainerClusterVO newCluster = new ContainerClusterVO(name, displayName, zoneId,
                         serviceOfferingId, template.getId(), defaultNetwork.getId(), owner.getDomainId(),
-                        owner.getAccountId(), clusterSize, "Created", sshKeyPair, cores, memory, "", "");
+                        owner.getAccountId(), clusterSize, ContainerCluster.State.Created, sshKeyPair, cores, memory, "", "");
                 _containerClusterDao.persist(newCluster);
                 return newCluster;
             }
@@ -274,7 +278,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.debug("Starting container cluster: " + containerCluster.getName());
         }
 
-        updateContainerClusterState(containerClusterId, "Starting");
+        stateTransitTo(containerClusterId, ContainerCluster.Event.StartContainerCluster);
 
         Account account = _accountDao.findById(containerCluster.getAccountId());
 
@@ -288,7 +292,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 s_logger.debug("Network " + containerCluster.getNetworkId() + " is started for the  container cluster: " + containerCluster.getName());
             }
         } catch(Exception e) {
-            updateContainerClusterState(containerClusterId, "Error");
+            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             s_logger.warn("Starting the network failed as part of starting container cluster " + containerCluster.getName() + " due to " + e);
             throw new ManagementServerException("Failed to start the network while creating container cluster " + containerCluster.getName());
         }
@@ -300,7 +304,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 s_logger.debug("Provisioned the master VM's in to the container cluster: " + containerCluster.getName());
             }
         } catch (Exception e) {
-            updateContainerClusterState(containerClusterId, "Error");
+            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             s_logger.warn("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName() + " due to " + e);
             throw new ManagementServerException("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName());
         }
@@ -335,7 +339,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     s_logger.debug("Provisioned a node VM in to the container cluster: " + containerCluster.getName());
                 }
             } catch (Exception e) {
-                updateContainerClusterState(containerClusterId, "Error");
+                stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
                 s_logger.warn("Provisioning the node VM failed in the container cluster " + containerCluster.getName() + " due to " + e);
                 throw new ManagementServerException("Provisioning the node VM failed in the container cluster " + containerCluster.getName());
             }
@@ -403,7 +407,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         } catch (Exception e) {
             s_logger.warn("Failed to provision firewall rules for the container cluster: " + containerCluster.getName()
                     + " due to exception: " + getStackTrace(e));
-            updateContainerClusterState(containerClusterId, "Error");
+            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             throw new ManagementServerException("Failed to provision firewall rules for the container " +
                     "cluster: " + containerCluster.getName());
         }
@@ -440,7 +444,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
         } catch (Exception e) {
             s_logger.warn("Failed to activate port forwarding rules for the container cluster " + containerCluster.getName() + " due to "  + e);
-            updateContainerClusterState(containerClusterId, "Error");
+            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName() + " due to " + e);
         }
 
@@ -462,7 +466,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
             //FIXME: whole logic needs revamp. Assumption that management server has public network access is not practical
             String kubectlUrl = publicIp.getAddress().addr();
-            containerCluster.setState("Running");
+            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
             _containerClusterDao.update(containerCluster.getId(), containerCluster);
 
             Runtime r = Runtime.getRuntime();
@@ -494,7 +498,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         } else {
             s_logger.warn("Failed to setup container cluster " + containerCluster.getName() + " in usable state");
-            containerCluster.setState("Error");
+            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             _containerClusterDao.update(containerCluster.getId(), containerCluster);
         }
 
@@ -516,13 +520,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         // TODO: Assume for now through API, permit delete container cluster only in running state
         // and let garbage collector clean container cluster in other states
-        if (!cluster.getState().equals("Running")) {
+        if (!cluster.getState().equals(ContainerCluster.State.Running)) {
             s_logger.debug("Cannot perform this operation, cluster " + cluster.getName() + " is not in running state");
             throw new PermissionDeniedException("Cannot perform this operation, cluster " + cluster.getName() + " is not in running state");
         }
 
-        cluster.setState("Deleting");
-        _containerClusterDao.update(cluster.getId(), cluster);
+        stateTransitTo(containerClusterId, ContainerCluster.Event.StopContainerCluster);
 
         List<ContainerClusterVmMapVO> clusterVMs = _containerClusterVmMapDao.listByClusterId(cluster.getId());
 
@@ -567,11 +570,13 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             if (s_logger.isDebugEnabled()) {
                 s_logger.debug("Not deleting the network as there are VM's that are not expunged in container cluster " + cluster.getName());
             }
+            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             return false;
         }
 
         if (failedNetworkDestroy) {
             s_logger.warn("Container cluster: " + cluster.getName() + " failued to get destroyed as network in the cluster is not expunged.");
+            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             return false;
         }
 
@@ -815,7 +820,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         response.setKeypair(containerCluster.getKeyPair());
 
-        response.setState(containerCluster.getState());
+        response.setState(containerCluster.getState().toString());
 
         response.setCores(String.valueOf(containerCluster.getCores()));
 
@@ -861,10 +866,16 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return new String(encoded);
     }
 
-    private void updateContainerClusterState(long containerClusterId, String state) {
+    protected boolean stateTransitTo(long containerClusterId, ContainerCluster.Event e)  {
         ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
-        containerCluster.setState(state);
-        _containerClusterDao.update(containerCluster.getId(), containerCluster);
+        try {
+            s_logger.debug("current state : " + containerCluster.getState().toString());
+            s_logger.debug("Event : " + e.toString());
+            return _stateMachine.transitTo(containerCluster, e, null, _containerClusterDao);
+        } catch (NoTransitionException nte) {
+            s_logger.warn("Failed to transistion state of the container cluster " + nte);
+            return false;
+        }
     }
 
     private static String getStackTrace(final Throwable throwable) {
