@@ -185,6 +185,14 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                                                    final Long clusterSize)
             throws InsufficientCapacityException, ResourceAllocationException, ManagementServerException {
 
+        if (name == null || name.isEmpty()) {
+            throw new InvalidParameterValueException("Invalid name for the container cluster name: " + name);
+        }
+
+        if (clusterSize < 1) {
+            throw new InvalidParameterValueException("invalid cluster size " + clusterSize);
+        }
+
         DataCenter zone =  _dcDao.findById(zoneId);
         if (zone == null) {
             throw new InvalidParameterValueException("Unable to find zone by id=" + zoneId);

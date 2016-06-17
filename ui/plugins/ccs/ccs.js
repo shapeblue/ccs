@@ -269,7 +269,7 @@
 
                                 messages: {
                                     notification: function(args) {
-                                        return 'label.containercluster.add';
+                                        return 'Container Cluster Add';
                                     }
                                 },
                                 notification: {
@@ -333,7 +333,7 @@
                                     },
                                     messages: {
                                         notification: function(args) {
-                                            return 'label.action.destroy.instance';
+                                            return 'Container Cluster Destroy';
                                         }
                                     },
                                     action: function(args) {
