@@ -18,21 +18,29 @@
 package com.cloud.containercluster;
 
 import com.cloud.api.ApiDBUtils;
+import com.cloud.capacity.CapacityManager;
 import com.cloud.containercluster.dao.ContainerClusterDao;
 import com.cloud.containercluster.dao.ContainerClusterDetailsDao;
 import com.cloud.containercluster.dao.ContainerClusterVmMapDao;
+import com.cloud.dc.ClusterDetailsDao;
+import com.cloud.dc.ClusterDetailsVO;
+import com.cloud.dc.ClusterVO;
 import com.cloud.dc.DataCenter;
+import com.cloud.dc.dao.ClusterDao;
 import com.cloud.dc.dao.DataCenterDao;
+import com.cloud.dc.dao.HostPodDao;
 import com.cloud.dc.DataCenterVO;
 import com.cloud.deploy.DeployDestination;
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.InsufficientCapacityException;
+import com.cloud.exception.InsufficientServerCapacityException;
 import com.cloud.exception.InvalidParameterValueException;
 import com.cloud.exception.ManagementServerException;
 import com.cloud.exception.NetworkRuleConflictException;
 import com.cloud.exception.PermissionDeniedException;
 import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
+import com.cloud.host.HostVO;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.NetworkService;
 import com.cloud.network.PhysicalNetwork;
@@ -51,6 +59,7 @@ import com.cloud.offerings.NetworkOfferingVO;
 import com.cloud.offerings.dao.NetworkOfferingDao;
 import com.cloud.offerings.dao.NetworkOfferingServiceMapDao;
 import com.cloud.org.Grouping;
+import com.cloud.resource.ResourceManager;
 import com.cloud.service.dao.ServiceOfferingDao;
 import com.cloud.service.ServiceOfferingVO;
 import com.cloud.storage.VMTemplateVO;
@@ -61,6 +70,7 @@ import com.cloud.user.User;
 import com.cloud.user.dao.AccountDao;
 import com.cloud.user.dao.SSHKeyPairDao;
 import com.cloud.uservm.UserVm;
+import com.cloud.utils.Pair;
 import com.cloud.utils.component.ComponentContext;
 import com.cloud.utils.db.Transaction;
 import com.cloud.utils.db.TransactionCallback;
@@ -173,6 +183,16 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     private ServiceOfferingDao _srvOfferingDao;
     @Inject
     private UserVmDao _userVmDao;
+    @Inject
+    protected CapacityManager _capacityMgr;
+    @Inject
+    protected ResourceManager _resourceMgr;
+    @Inject
+    protected ClusterDetailsDao _clusterDetailsDao;
+    @Inject
+    protected ClusterDao _clusterDao;
+    @Inject
+    private HostPodDao _podDao;
 
     @Override
     public ContainerCluster createContainerCluster(final String name,
@@ -286,8 +306,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         Account account = _accountDao.findById(containerCluster.getAccountId());
 
-        DataCenter dc = _dcDao.findById(containerCluster.getZoneId());
-        final DeployDestination dest = new DeployDestination(dc, null, null, null);
+        final DeployDestination dest = plan(containerClusterId, containerCluster.getZoneId());
         final ReservationContext context = new ReservationContextImpl(null, null, null, account);
 
         try {
@@ -505,9 +524,73 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             containerCluster.setState("Error");
             _containerClusterDao.update(containerCluster.getId(), containerCluster);
         }
-
         return containerCluster;
     }
+
+
+    public DeployDestination plan(final long containerClusterId, final long dcId) throws InsufficientServerCapacityException {
+        ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
+        ServiceOffering offering = _srvOfferingDao.findById(containerCluster.getServiceOfferingId());
+
+        if (s_logger.isDebugEnabled()){
+            s_logger.debug("Checking deployment destination for containerClusterId= " + containerClusterId + " in dcId=" + dcId);
+        }
+
+        List<ClusterVO> clusters = _clusterDao.listByZoneId(dcId);
+        final int cpu_requested = offering.getCpu() * offering.getSpeed();
+        final long ram_requested = offering.getRamSize() * 1024L * 1024L;
+        for (ClusterVO cluster : clusters) {
+            List<HostVO> hosts = _resourceMgr.listAllHostsInCluster(cluster.getId());
+            List<Pair<HostVO, Integer>> hosts_with_resevered_capacity = new ArrayList<Pair<HostVO, Integer>>();
+            for (HostVO h : hosts) {
+                hosts_with_resevered_capacity.add(new Pair<HostVO, Integer>(h, 0));
+            }
+            ClusterDetailsVO cluster_detail_cpu = _clusterDetailsDao.findDetail(cluster.getId(), "cpuOvercommitRatio");
+            ClusterDetailsVO cluster_detail_ram = _clusterDetailsDao.findDetail(cluster.getId(), "memoryOvercommitRatio");
+            Float cpuOvercommitRatio = Float.parseFloat(cluster_detail_cpu.getValue());
+            Float memoryOvercommitRatio = Float.parseFloat(cluster_detail_ram.getValue());
+            boolean suitable_host_found=false;
+            for (int i=1; i <= containerCluster.getNodeCount(); i++) {
+                suitable_host_found=false;
+                for (Pair<HostVO, Integer> hp : hosts_with_resevered_capacity) {
+                    HostVO h = hp.first();
+                    Integer reserved = hp.second();
+                    if (s_logger.isDebugEnabled()){
+                        s_logger.debug("Find host " + h.getId() + " has enough capacity");
+                    }
+                    if (_capacityMgr.checkIfHostHasCapacity(h.getId(), cpu_requested + cpu_requested * reserved, ram_requested + ram_requested * reserved, false, cpuOvercommitRatio, memoryOvercommitRatio, true)) {
+                        if (s_logger.isDebugEnabled()){
+                            s_logger.debug("Find host " + h.getId() + " has enough capacity ");
+                        }
+                        hosts_with_resevered_capacity.add(new Pair<HostVO, Integer>(h, reserved++));
+                        suitable_host_found = true;
+                        break;
+                    }
+                }
+                if (suitable_host_found){
+                    continue;
+                }
+                else {
+                     if (s_logger.isDebugEnabled()){
+                         s_logger.debug("Suitable hosts not found in cluster " + cluster.getId());
+                     }
+                    break;
+                }
+            }
+            if (suitable_host_found){
+                if (s_logger.isDebugEnabled()){
+                    s_logger.debug("Suitable hosts found in cluster " + cluster.getId() + " creating deployment destination");
+                }
+                return new DeployDestination(_dcDao.findById(dcId), _podDao.findById(cluster.getPodId()), cluster, null);
+            }
+        }
+        s_logger.warn(String.format("Cannot find enough capacity for container_cluster(requested cpu=%1$s memory=%2$s)",
+                cpu_requested*containerCluster.getNodeCount(), ram_requested*containerCluster.getNodeCount()));
+        throw new InsufficientServerCapacityException(String.format("Cannot find enough capacity for container_cluster(requested cpu=%1$s memory=%2$s)",
+                cpu_requested*containerCluster.getNodeCount(), ram_requested*containerCluster.getNodeCount()), DataCenter.class, dcId);
+    }
+
+
 
     @Override
     public boolean deleteContainerCluster(Long containerClusterId) {
