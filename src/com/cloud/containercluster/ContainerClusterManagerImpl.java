@@ -372,7 +372,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         int retryCounter = 0;
         int maxRetries = 10;
-        boolean clusterSetup = false;
+        boolean k8sApiServerSetup = false;
 
         List<String> sourceCidrList = new ArrayList<String>();
         sourceCidrList.add("0.0.0.0/0");
@@ -455,7 +455,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         while (retryCounter < maxRetries) {
             try (Socket socket = new Socket()) {
                 socket.connect(new InetSocketAddress(publicIp.getAddress().addr(), 443), 10000);
-                clusterSetup = true;
+                k8sApiServerSetup = true;
                 break;
             } catch (IOException e) {
                 if (s_logger.isDebugEnabled()) {
@@ -466,47 +466,74 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
         }
 
-        if (clusterSetup) {
-
-            //FIXME: whole logic needs revamp. Assumption that management server has public network access is not practical
-            String kubectlUrl = publicIp.getAddress().addr();
-            containerCluster.setState("Running");
-            _containerClusterDao.update(containerCluster.getId(), containerCluster);
-
-            Runtime r = Runtime.getRuntime();
-
-            int nodePort = 0;
-            try {
-                Process p = r.exec("curl https://" + kubectlUrl + "/api/v1/proxy/namespaces/kube-system/services/kubernetes-dashboard");
-                p.waitFor();
-                BufferedReader b = new BufferedReader(new InputStreamReader(p.getInputStream()));
-                String line = "";
-                while ((line = b.readLine()) != null) {
-                    if (line.contains("nodePort")) {
-                        String[] nodeportStr = line.split(":");
-                        nodePort = Integer.valueOf(nodeportStr[1].substring(1, nodeportStr[1].length()));
-                        if (s_logger.isDebugEnabled()) {
-                            s_logger.debug("K8S dashboard service is running on: " + nodePort);
-                        }
-                    }
+        if (k8sApiServerSetup) {
+            retryCounter = 0;
+            maxRetries = 6;
+            // Dashbaord service is a dcoker image downloaded at run time.
+            // So wait for some time and check if dashbaord service is up running.
+            while (retryCounter < maxRetries) {
+                if (isAddOnServiceRunning(containerCluster.getId(), "kubernetes-dashboard")) {
+                    containerCluster.setState("Running");
+                    _containerClusterDao.update(containerCluster.getId(), containerCluster);
+                    containerCluster.setConsoleEndpoint("https://" + publicIp.getAddress() + "/api/v1/proxy/namespaces/kube-system/services/kubernetes-dashboard");
+                    _containerClusterDao.update(containerCluster.getId(), containerCluster);
+                    return containerCluster;
                 }
-                b.close();
-            } catch (IOException excep) {
-                s_logger.warn("KUBECTL: " + excep);
-            } catch (InterruptedException e) {
-                s_logger.warn("KUBECTL: " + e);
+                try { Thread.sleep(30000);} catch (Exception ex) {}
+                retryCounter++;
             }
-
-            containerCluster.setConsoleEndpoint("https://" + publicIp.getAddress() + "/api/v1/proxy/namespaces/kube-system/services/kubernetes-dashboard" );
-            _containerClusterDao.update(containerCluster.getId(), containerCluster);
-
+            s_logger.warn("Failed to setup container cluster " + containerCluster.getName() + " in usable state as" +
+                    " unable to bring dashboard add on service up");
         } else {
-            s_logger.warn("Failed to setup container cluster " + containerCluster.getName() + " in usable state");
-            containerCluster.setState("Error");
-            _containerClusterDao.update(containerCluster.getId(), containerCluster);
+            s_logger.warn("Failed to setup container cluster " + containerCluster.getName() + " in usable state as" +
+                    " unable to bring the API server up");
         }
 
-        return containerCluster;
+        containerCluster.setState("Error");
+        _containerClusterDao.update(containerCluster.getId(), containerCluster);
+
+        throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR,
+                "Failed to deploy container cluster: " + containerCluster.getId() + " as unable to setup up in usable state");
+    }
+
+    private boolean isAddOnServiceRunning(Long clusterId, String svcName) {
+
+        ContainerClusterVO containerCluster = _containerClusterDao.findById(clusterId);
+
+        //FIXME: whole logic needs revamp. Assumption that management server has public network access is not practical
+        IPAddressVO publicIp = null;
+        List<IPAddressVO> ips = _publicIpAddressDao.listByAssociatedNetwork(containerCluster.getNetworkId(), true);
+        if (ips != null && !ips.isEmpty()) {
+            publicIp = ips.get(0);
+        }
+        Runtime r = Runtime.getRuntime();
+        int nodePort = 0;
+        try {
+            ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
+            String execStr = "kubectl -s https://" + publicIp.getAddress().addr() + "/ --username=admin "
+                    + " --password=" + clusterDetails.getPassword()
+                    + " get pods --insecure-skip-tls-verify=true --namespace=kube-system";
+            Process p = r.exec(execStr);
+            p.waitFor();
+            BufferedReader b = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            String line = "";
+            while ((line = b.readLine()) != null) {
+                s_logger.debug("KUBECTL : " + line);
+                if (line.contains(svcName) && line.contains("Running")) {
+                    if (s_logger.isDebugEnabled()) {
+                        s_logger.debug("Service :" + svcName + " for the container cluster "
+                                + containerCluster.getName() + " is running");
+                    }
+                    return true;
+                }
+            }
+            b.close();
+        } catch (IOException excep) {
+            s_logger.warn("KUBECTL: " + excep);
+        } catch (InterruptedException e) {
+            s_logger.warn("KUBECTL: " + e);
+        }
+        return false;
     }
 
     @Override
@@ -776,18 +803,18 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
             _accountMgr.checkAccess(caller, SecurityChecker.AccessType.ListEntry, false, cluster);
 
-            responsesList.add(createContainerClusterResponse(cluster));
+            responsesList.add(createContainerClusterResponse(cmd.getId()));
         } else {
             if (_accountMgr.isAdmin(caller.getId())) {
                 List<ContainerClusterVO> containerClusters = _containerClusterDao.listAll();
                 for (ContainerClusterVO cluster : containerClusters) {
-                    ContainerClusterResponse clusterReponse = createContainerClusterResponse(cluster);
+                    ContainerClusterResponse clusterReponse = createContainerClusterResponse(cluster.getId());
                     responsesList.add(clusterReponse);
                 }
             } else {
                 List<ContainerClusterVO> containerClusters = _containerClusterDao.listByAccount(caller.getAccountId());
                 for (ContainerClusterVO cluster : containerClusters) {
-                    ContainerClusterResponse clusterReponse = createContainerClusterResponse(cluster);
+                    ContainerClusterResponse clusterReponse = createContainerClusterResponse(cluster.getId());
                     responsesList.add(clusterReponse);
                 }
             }
@@ -797,8 +824,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return response;
     }
 
-    public ContainerClusterResponse createContainerClusterResponse(ContainerCluster containerCluster) {
+    public ContainerClusterResponse createContainerClusterResponse(long containerClusterId) {
 
+        ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
         ContainerClusterResponse response = new ContainerClusterResponse();
 
         response.setId(containerCluster.getUuid());
