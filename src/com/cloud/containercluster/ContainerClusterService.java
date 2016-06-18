@@ -46,6 +46,6 @@ public interface ContainerClusterService extends PluggableService {
 
     ListResponse<ContainerClusterResponse>  listContainerClusters(ListContainerClusterCmd cmd);
 
-    ContainerClusterResponse createContainerClusterResponse(ContainerCluster containerCluster);
+    ContainerClusterResponse createContainerClusterResponse(long containerClusterId);
 
 }

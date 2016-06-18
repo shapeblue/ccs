@@ -209,27 +209,26 @@ public class CreateContainerClusterCmd extends BaseAsyncCreateCmd {
         ContainerCluster containerCluster;
 
         try {
-            containerCluster = _containerClusterService.startContainerCluster(getEntityId());
-        } catch (InsufficientCapacityException ex) {
-            s_logger.warn("Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.INSUFFICIENT_CAPACITY_ERROR, ex.getMessage());
-        } catch (ResourceUnavailableException ex) {
-            s_logger.warn("Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.RESOURCE_UNAVAILABLE_ERROR, ex.getMessage());
-        } catch (ResourceAllocationException ex) {
-            s_logger.warn("Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.RESOURCE_ALLOCATION_ERROR, ex.getMessage());
-        } catch (ManagementServerException ex) {
-            s_logger.warn("Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, ex.getMessage());
-        }
-
-        if (containerCluster != null) {
-            ContainerClusterResponse response = _containerClusterService.createContainerClusterResponse(containerCluster);
+            _containerClusterService.startContainerCluster(getEntityId());
+            ContainerClusterResponse response = _containerClusterService.createContainerClusterResponse(getEntityId());
             response.setResponseName(getCommandName());
             setResponseObject(response);
-        } else {
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to deploy container cluster:" + getEntityUuid());
+        } catch (InsufficientCapacityException ex) {
+            s_logger.warn("Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
+            throw new ServerApiException(ApiErrorCode.INSUFFICIENT_CAPACITY_ERROR,
+                    "Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
+        } catch (ResourceUnavailableException ex) {
+            s_logger.warn("Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
+            throw new ServerApiException(ApiErrorCode.RESOURCE_UNAVAILABLE_ERROR,
+                    "Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
+        } catch (ResourceAllocationException ex) {
+            s_logger.warn("Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
+            throw new ServerApiException(ApiErrorCode.RESOURCE_ALLOCATION_ERROR,
+                    "Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
+        } catch (ManagementServerException ex) {
+            s_logger.warn("Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR,
+                    "Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
         }
     }
 
