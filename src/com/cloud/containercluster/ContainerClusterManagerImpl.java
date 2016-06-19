@@ -459,7 +459,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 break;
             } catch (IOException e) {
                 if (s_logger.isDebugEnabled()) {
-                    s_logger.debug("container cluster " + containerCluster.getName() + " API endpoint is not yet available. retry:" + retryCounter + "/" + maxRetries);
+                    s_logger.debug("Waiting for container cluster: " + containerCluster.getName() + " API endpoint to be available. retry: " + retryCounter + "/" + maxRetries);
                 }
                 try { Thread.sleep(50000); } catch (Exception ex) {}
                 retryCounter++;
@@ -468,10 +468,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         if (k8sApiServerSetup) {
             retryCounter = 0;
-            maxRetries = 6;
+            maxRetries = 10;
             // Dashbaord service is a dcoker image downloaded at run time.
             // So wait for some time and check if dashbaord service is up running.
             while (retryCounter < maxRetries) {
+                s_logger.debug("Waiting for dashboard service for the container cluster: " + containerCluster.getName()
+                        + " to come up. Attempt: " + retryCounter + " of max retries " +  maxRetries);
                 if (isAddOnServiceRunning(containerCluster.getId(), "kubernetes-dashboard")) {
                     containerCluster.setState("Running");
                     _containerClusterDao.update(containerCluster.getId(), containerCluster);
