@@ -21,9 +21,11 @@ import com.cloud.utils.db.SearchBuilder;
 import com.cloud.utils.db.SearchCriteria;
 import org.springframework.stereotype.Component;
 
+import com.cloud.containercluster.ContainerCluster.Event;
 import com.cloud.containercluster.ContainerClusterVO;
 import com.cloud.utils.db.GenericDaoBase;
-
+import com.cloud.utils.db.TransactionLegacy;
+import com.cloud.containercluster.ContainerCluster;
 import java.util.List;
 
 
@@ -43,5 +45,21 @@ public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, 
         SearchCriteria<ContainerClusterVO> sc = AccountIdSearch.create();
         sc.setParameters("account", accountId);
         return listBy(sc, null);
+    }
+
+    @Override
+    public boolean updateState(com.cloud.containercluster.ContainerCluster.State currentState, Event event,
+                               com.cloud.containercluster.ContainerCluster.State nextState,
+                               ContainerCluster vo, Object data) {
+        // TODO: ensure this update is correct
+        TransactionLegacy txn = TransactionLegacy.currentTxn();
+        txn.start();
+
+        ContainerClusterVO ccVo = (ContainerClusterVO)vo;
+        ccVo.setState(nextState);
+        super.update(ccVo.getId(), ccVo);
+
+        txn.commit();
+        return true;
     }
 }

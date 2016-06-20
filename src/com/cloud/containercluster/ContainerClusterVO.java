@@ -16,6 +16,7 @@
 // under the License.
 package com.cloud.containercluster;
 
+import java.util.Date;
 import java.util.UUID;
 
 
@@ -26,6 +27,8 @@ import javax.persistence.Id;
 import javax.persistence.Table;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
+
+import com.cloud.utils.db.GenericDao;
 
 @Entity
 @Table(name = "sb_ccs_container_cluster")
@@ -149,11 +152,11 @@ public class ContainerClusterVO implements ContainerCluster {
     }
 
     @Override
-    public String getState() {
+    public State getState() {
         return state;
     }
 
-    public void setState(String state) {
+    public void setState(State state) {
         this.state = state;
     }
 
@@ -163,7 +166,7 @@ public class ContainerClusterVO implements ContainerCluster {
     }
 
     public void setEndpoint(String endpoint) {
-        this.state = endpoint;
+        this.endpoint = endpoint;
     }
 
     public String getKeyPair() {
@@ -225,7 +228,7 @@ public class ContainerClusterVO implements ContainerCluster {
     long memory;
 
     @Column(name = "state")
-    String state;
+    State  state;
 
     @Column(name = "key_pair")
     String keyPair;
@@ -236,13 +239,18 @@ public class ContainerClusterVO implements ContainerCluster {
     @Column(name = "console_endpoint")
     String consoleEndpoint;
 
+    @Column(name = GenericDao.CREATED_COLUMN)
+    protected Date created;
+
+    @Column(name = GenericDao.REMOVED_COLUMN)
+    protected Date removed;
 
     public ContainerClusterVO() {
 
     }
 
     public ContainerClusterVO(String name, String description, long zoneId, long serviceOfferingId, long templateId,
-                               long networkId, long domainId, long accountId, long nodeCount, String state,
+                               long networkId, long domainId, long accountId, long nodeCount, State state,
                               String keyPair, long cores, long memory, String endpoint, String consoleEndpoint) {
         this.uuid = UUID.randomUUID().toString();
         this.name = name;
@@ -270,5 +278,10 @@ public class ContainerClusterVO implements ContainerCluster {
     @Override
     public boolean isDisplay() {
         return true;
+    }
+
+
+    public Date getRemoved() {
+        return removed;
     }
 }

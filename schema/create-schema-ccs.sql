@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS `cloud`.`sb_ccs_container_cluster` (
     `memory` bigint unsigned NOT NULL COMMENT 'total memory',
     `endpoint` varchar(255) COMMENT 'url endpoint of the container cluster manager api access',
     `console_endpoint` varchar(255) COMMENT 'url for the container cluster manager dashbaord',
+    `created` datetime NOT NULL COMMENT 'date created',
+    `removed` datetime COMMENT 'date removed if not null',
 
     CONSTRAINT `fk_cluster__zone_id` FOREIGN KEY `fk_cluster__zone_id` (`zone_id`) REFERENCES `data_center` (`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_cluster__service_offering_id` FOREIGN KEY `fk_cluster__service_offering_id` (`service_offering_id`) REFERENCES `service_offering`(`id`) ON DELETE CASCADE,

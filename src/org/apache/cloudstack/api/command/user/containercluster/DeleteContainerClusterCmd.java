@@ -85,6 +85,7 @@ public class DeleteContainerClusterCmd extends BaseAsyncCmd {
             SuccessResponse response = new SuccessResponse(getCommandName());
             setResponseObject(response);
         } catch (Exception e) {
+            s_logger.warn("Failed to delete vm container cluster due to " + e);
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to delete vm container cluster");
         }
     }

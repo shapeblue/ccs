@@ -16,12 +16,15 @@
 // under the License.
 package com.cloud.containercluster.dao;
 
+import com.cloud.containercluster.ContainerCluster;
 import com.cloud.containercluster.ContainerClusterVO;
 import com.cloud.utils.db.GenericDao;
+import com.cloud.utils.fsm.StateDao;
 
 import java.util.List;
 
-public interface ContainerClusterDao extends GenericDao<ContainerClusterVO, Long> {
+public interface ContainerClusterDao extends GenericDao<ContainerClusterVO, Long>,
+        StateDao<ContainerCluster.State, ContainerCluster.Event, ContainerCluster> {
 
     List<ContainerClusterVO> listByAccount(long accountId);
 }
