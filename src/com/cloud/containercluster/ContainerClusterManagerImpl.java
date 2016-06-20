@@ -116,6 +116,7 @@ import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -265,7 +266,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                         null, null, null, null, owner, null, physicalNetwork, zone.getId(), ControlledEntity.ACLType.Account, null, null, null, null, true, null);
             } catch(Exception e) {
                 s_logger.warn("Unable to create a network for the container cluster due to " + e);
-                throw new ManagementServerException("Unable to create a network for the container cluster.");
+                throw new ManagementServerException("Unable to create a network for the container cluster.", e);
             }
         }
 
@@ -314,10 +315,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             if (s_logger.isDebugEnabled()) {
                 s_logger.debug("Network " + containerCluster.getNetworkId() + " is started for the  container cluster: " + containerCluster.getName());
             }
+        }catch (RuntimeException e) {
+            throw e;
         } catch(Exception e) {
             updateContainerClusterState(containerClusterId, "Error");
             s_logger.warn("Starting the network failed as part of starting container cluster " + containerCluster.getName() + " due to " + e);
-            throw new ManagementServerException("Failed to start the network while creating container cluster " + containerCluster.getName());
+            throw new ManagementServerException("Failed to start the network while creating container cluster " + containerCluster.getName(), e);
         }
 
         UserVm k8sMasterVM = null;
@@ -326,10 +329,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             if (s_logger.isDebugEnabled()) {
                 s_logger.debug("Provisioned the master VM's in to the container cluster: " + containerCluster.getName());
             }
+        }catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             updateContainerClusterState(containerClusterId, "Error");
             s_logger.warn("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName() + " due to " + e);
-            throw new ManagementServerException("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName());
+            throw new ManagementServerException("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName(), e);
         }
 
         final long clusterId = containerCluster.getId();
@@ -361,10 +366,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 if (s_logger.isDebugEnabled()) {
                     s_logger.debug("Provisioned a node VM in to the container cluster: " + containerCluster.getName());
                 }
+            }catch (RuntimeException e) {
+                throw e;
             } catch (Exception e) {
                 updateContainerClusterState(containerClusterId, "Error");
                 s_logger.warn("Provisioning the node VM failed in the container cluster " + containerCluster.getName() + " due to " + e);
-                throw new ManagementServerException("Provisioning the node VM failed in the container cluster " + containerCluster.getName());
+                throw new ManagementServerException("Provisioning the node VM failed in the container cluster " + containerCluster.getName(), e);
             }
 
             if (anyNodeVmId == 0) {
@@ -427,12 +434,14 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 s_logger.debug("Provisioned firewall rule to open up port 443 on " + publicIp.getAddress() +
                         " for cluster " + containerCluster.getName());
             }
+        }catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             s_logger.warn("Failed to provision firewall rules for the container cluster: " + containerCluster.getName()
                     + " due to exception: " + getStackTrace(e));
             updateContainerClusterState(containerClusterId, "Error");
             throw new ManagementServerException("Failed to provision firewall rules for the container " +
-                    "cluster: " + containerCluster.getName());
+                    "cluster: " + containerCluster.getName(), e);
         }
 
         Nic masterVmNic = _networkModel.getNicInNetwork(k8sMasterVM.getId(), containerCluster.getNetworkId());
@@ -444,7 +453,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         final long masterVmIdFinal = masterVmId;
 
         try {
-            PortForwardingRuleVO pfRule = Transaction.execute(new TransactionCallbackWithException<PortForwardingRuleVO, NetworkRuleConflictException>() {
+            Transaction.execute(new TransactionCallbackWithException<PortForwardingRuleVO, NetworkRuleConflictException>() {
                 @Override
                 public PortForwardingRuleVO doInTransaction(TransactionStatus status) throws NetworkRuleConflictException {
                     PortForwardingRuleVO newRule =
@@ -465,10 +474,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 s_logger.debug("Provisioning port forwarding rule from port 443 on " + publicIp.getAddress() +
                         " to the master VM IP :" + masterIpFinal + " in container cluster " + containerCluster.getName());
             }
+        }catch (RuntimeException e) {
+            throw e;
         } catch (Exception e) {
             s_logger.warn("Failed to activate port forwarding rules for the container cluster " + containerCluster.getName() + " due to "  + e);
             updateContainerClusterState(containerClusterId, "Error");
-            throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName() + " due to " + e);
+            throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName() + " due to " + e, e);
         }
 
         while (retryCounter < maxRetries) {
@@ -480,7 +491,13 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 if (s_logger.isDebugEnabled()) {
                     s_logger.debug("container cluster " + containerCluster.getName() + " API endpoint is not yet available. retry:" + retryCounter + "/" + maxRetries);
                 }
-                try { Thread.sleep(50000); } catch (Exception ex) {}
+                try {
+                    Thread.sleep(50000);
+                }
+                catch (RuntimeException re) {
+                    throw re;
+                }
+                catch (Exception ex) {}
                 retryCounter++;
             }
         }
@@ -498,7 +515,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             try {
                 Process p = r.exec("curl https://" + kubectlUrl + "/api/v1/proxy/namespaces/kube-system/services/kubernetes-dashboard");
                 p.waitFor();
-                BufferedReader b = new BufferedReader(new InputStreamReader(p.getInputStream()));
+                BufferedReader b = new BufferedReader(new InputStreamReader(p.getInputStream(), Charset.forName("UTF-8")));
                 String line = "";
                 while ((line = b.readLine()) != null) {
                     if (line.contains("nodePort")) {
@@ -511,9 +528,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 }
                 b.close();
             } catch (IOException excep) {
-                s_logger.warn("KUBECTL: " + excep);
+                s_logger.warn("KUBECTL: " + excep, excep);
             } catch (InterruptedException e) {
-                s_logger.warn("KUBECTL: " + e);
+                s_logger.warn("KUBECTL: " + e, e);
             }
 
             containerCluster.setConsoleEndpoint("https://" + publicIp.getAddress() + "/api/v1/proxy/namespaces/kube-system/services/kubernetes-dashboard" );
@@ -556,7 +573,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     HostVO h = hp.first();
                     Integer reserved = hp.second();
                     if (s_logger.isDebugEnabled()){
-                        s_logger.debug("Find host " + h.getId() + " has enough capacity");
+                        s_logger.debug("Checking host " + h.getId() + " for capacity");
                     }
                     if (_capacityMgr.checkIfHostHasCapacity(h.getId(), cpu_requested + cpu_requested * reserved, ram_requested + ram_requested * reserved, false, cpuOvercommitRatio, memoryOvercommitRatio, true)) {
                         if (s_logger.isDebugEnabled()){
@@ -633,7 +650,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 failedVmDestroy = true;
                 s_logger.warn("Failed to destroy VM :" + userVM.getInstanceName() + " part of the cluster: " + cluster.getName() +
                         " due to " + e);
-                s_logger.warn("Moving on with destroying remaining resources provisioned for the cluster: " + cluster.getName());
+                s_logger.warn("Moving on with destroying remaining resources provisioned for the cluster: " + cluster.getName(), e);
             }
         }
 
@@ -719,7 +736,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.error("Failed to read kubernetes master configuration file");
         }
 
-        String base64UserData = Base64.encodeBase64String(k8sMasterConfig.getBytes());
+        String base64UserData = Base64.encodeBase64String(k8sMasterConfig.getBytes(Charset.forName("UTF-8")));
 
 
         masterVm = _userVmService.createAdvancedVirtualMachine(zone, serviceOffering, template, networkIds, owner,
@@ -796,7 +813,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             throw new ManagementServerException("Failed to read cluster node configuration file.");
         }
 
-        String base64UserData = Base64.encodeBase64String(k8sNodeConfig.getBytes());
+        String base64UserData = Base64.encodeBase64String(k8sNodeConfig.getBytes(Charset.forName("UTF-8")));
 
         nodeVm = _userVmService.createAdvancedVirtualMachine(zone, serviceOffering, template, networkIds, owner,
                 hostName, containerCluster.getDescription(), null, null, null,
@@ -949,7 +966,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     static String readFile(String path) throws IOException
     {
         byte[] encoded = Files.readAllBytes(Paths.get(path));
-        return new String(encoded);
+        return new String(encoded, Charset.forName("UTF-8"));
     }
 
     private void updateContainerClusterState(long containerClusterId, String state) {
