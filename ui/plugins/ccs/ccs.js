@@ -436,7 +436,41 @@
                                         var s3 = '" width="940" height="600")>';
                                         return jQuery(s1.concat(s2, s3));
                                     }
-                                }
+                                },
+                                firewall: {
+                                    title: 'label.firewall',
+                                    custom: function(args) {
+                                        $.ajax({
+                                            url: createURL('listNetworks'),
+                                            data: {id: args.context.containerclusters[0].networkid},
+                                            async: false,
+                                            dataType: "json",
+                                            success: function(json) {
+                                                var network = json.listnetworksresponse.network;
+                                                $.extend(args.context, {"networks": [network]});
+                                            }
+                                        });
+
+                                        $.ajax({
+                                            url: createURL('listPublicIpAddresses'),
+                                            data: {associatedNetworkId: args.context.containerclusters[0].networkid, forvirtualnetwork: true},
+                                            async: false,
+                                            dataType: "json",
+                                            success: function(json) {
+                                                var ips = json.listpublicipaddressesresponse.publicipaddress;
+                                                var fwip = ips[0];
+                                                $.each(ips, function(idx, ip) {
+                                                    if (ip.issourcenat || ip.isstaticnat) {
+                                                        fwip = ip;
+                                                        return false;
+                                                    }
+                                                });
+                                                $.extend(args.context, {"ipAddresses": [fwip]});
+                                            }
+                                        });
+                                        return cloudStack.sections.network.sections.ipAddresses.listView.detailView.tabs.ipRules.custom(args);
+                                    },
+                                },
                             }
                         }
                     }
@@ -510,37 +544,54 @@
                                 }
                             }
 
-                            if ("virtualmachineids" in args.context.containerclusters[0]) {
-                                var vlist = args.context.containerclusters[0].virtualmachineids.join();
-                                $.extend(data, {
-                                    ids: vlist
-                                });
+                            var listData = {};
+                            if ("containerclusters" in args.context) {
+                                listData.id = args.context.containerclusters.id;
                             }
 
                             $.ajax({
-                                url: createURL('listVirtualMachines'),
-                                data: data,
+                                url: createURL("listContainerCluster"),
+                                data: listData,
                                 success: function(json) {
-                                    var items = json.listvirtualmachinesresponse.virtualmachine;
-                                    if (items) {
-                                        $.each(items, function(idx, vm) {
-                                            if (vm.nic && vm.nic.length > 0 && vm.nic[0].ipaddress) {
-                                                items[idx].ipaddress = vm.nic[0].ipaddress;
+                                    var items = json.listcontainerclusterresponse.containercluster;
+
+                                    var vmlist = [];
+                                    $.each(items, function(idx, item) {
+                                        if ("virtualmachineids" in item) {
+                                            vmlist = vmlist.concat(item.virtualmachineids);
+                                        }
+                                    });
+
+                                    $.extend(data, {
+                                        ids: vmlist.join()
+                                    });
+
+                                    $.ajax({
+                                        url: createURL('listVirtualMachines'),
+                                        data: data,
+                                        success: function(json) {
+                                            var items = json.listvirtualmachinesresponse.virtualmachine;
+                                            if (items) {
+                                                $.each(items, function(idx, vm) {
+                                                    if (vm.nic && vm.nic.length > 0 && vm.nic[0].ipaddress) {
+                                                        items[idx].ipaddress = vm.nic[0].ipaddress;
+                                                    }
+                                                });
                                             }
-                                        });
-                                    }
-                                    args.response.success({
-                                        data: items
+                                            args.response.success({
+                                                data: items
+                                            });
+                                        },
+                                        error: function(XMLHttpResponse) {
+                                            cloudStack.dialog.notice({
+                                                message: parseXMLHttpResponse(XMLHttpResponse)
+                                            });
+                                            args.response.error();
+                                        }
                                     });
-                                },
-                                error: function(XMLHttpResponse) {
-                                    cloudStack.dialog.notice({
-                                        message: parseXMLHttpResponse(XMLHttpResponse)
-                                    });
-                                    args.response.error();
                                 }
                             });
-                        },
+                       },
                     }
                 }
             }
