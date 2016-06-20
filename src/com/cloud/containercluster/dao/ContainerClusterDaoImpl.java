@@ -33,17 +33,29 @@ import java.util.List;
 public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, Long> implements ContainerClusterDao {
 
     private final SearchBuilder<ContainerClusterVO> AccountIdSearch;
+    private final SearchBuilder<ContainerClusterVO> GarbageCollectedSearch;
 
     public ContainerClusterDaoImpl() {
         AccountIdSearch = createSearchBuilder();
         AccountIdSearch.and("account", AccountIdSearch.entity().getAccountId(), SearchCriteria.Op.EQ);
         AccountIdSearch.done();
+
+        GarbageCollectedSearch = createSearchBuilder();
+        GarbageCollectedSearch.and("gc", GarbageCollectedSearch.entity().isMarkedForGC(), SearchCriteria.Op.EQ);
+        GarbageCollectedSearch.done();
     }
 
     @Override
     public List<ContainerClusterVO> listByAccount(long accountId) {
         SearchCriteria<ContainerClusterVO> sc = AccountIdSearch.create();
         sc.setParameters("account", accountId);
+        return listBy(sc, null);
+    }
+
+    @Override
+    public List<ContainerClusterVO> findContainerClustersToGarbageCollect() {
+        SearchCriteria<ContainerClusterVO> sc = AccountIdSearch.create();
+        sc.setParameters("gc", true);
         return listBy(sc, null);
     }
 

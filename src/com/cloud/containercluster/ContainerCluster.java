@@ -44,9 +44,9 @@ public interface ContainerCluster extends ControlledEntity, com.cloud.utils.fsm.
     }
 
     enum State {
-        Created("Initial State of container cluster. At this state its just a logica/DB entry no resources concumed"),
+        Created("Initial State of container cluster. At this state its just a logical/DB entry with no resources consumed"),
         Starting("Resources needed for container cluster are being provisioned"),
-        Running("Resources provisioned, cluster is in operational ready state to launch containers"),
+        Running("Necessary resources are provisioned and container cluster is in operational ready state to launch containers"),
         Stopping("Ephermal resources for the container cluster are being destroyed"),
         Stopped("All ephermal resources for the container cluster are destroyed, Container cluster may still have ephermal resource like persistent volumens provisioned"),
         Scaling("Transient state in which resoures are either getting scaled up/down"),

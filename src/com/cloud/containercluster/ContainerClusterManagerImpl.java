@@ -79,6 +79,7 @@ import com.cloud.offering.ServiceOffering;
 import com.cloud.template.VirtualMachineTemplate;
 import com.cloud.user.Account;
 import com.cloud.utils.component.ManagerBase;
+import com.cloud.utils.db.GlobalLock;
 import com.cloud.utils.fsm.StateMachine2;
 import com.cloud.utils.fsm.NoTransitionException;
 import org.apache.cloudstack.acl.ControlledEntity;
@@ -96,6 +97,7 @@ import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
+import org.apache.cloudstack.managed.context.ManagedContextRunnable;
 import org.apache.log4j.Logger;
 
 import javax.ejb.Local;
@@ -116,6 +118,11 @@ import java.util.List;
 import java.util.Map;
 import java.net.Socket;
 import java.security.SecureRandom;
+import com.cloud.utils.concurrency.NamedThreadFactory;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import javax.naming.ConfigurationException;
 import org.apache.commons.codec.binary.Base64;
 
 @Local(value = {ContainerClusterManager.class})
@@ -123,6 +130,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
     private static final Logger s_logger = Logger.getLogger(ContainerClusterManagerImpl.class);
     protected StateMachine2<ContainerCluster.State, ContainerCluster.Event, ContainerCluster> _stateMachine = ContainerCluster.State.getStateMachine();
+    ScheduledExecutorService _executor;
 
     @Inject
     ContainerClusterDao _containerClusterDao;
@@ -298,6 +306,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             if (s_logger.isDebugEnabled()) {
                 s_logger.debug("Network " + containerCluster.getNetworkId() + " is started for the  container cluster: " + containerCluster.getName());
             }
+        }catch (RuntimeException e) {
+            s_logger.warn("Failed to start the network while creating container cluster due to: " + e);
+            throw new ManagementServerException("Failed to start the network while creating container cluster " + containerCluster.getName());
         } catch(Exception e) {
             stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             s_logger.warn("Starting the network failed as part of starting container cluster " + containerCluster.getName() + " due to " + e);
@@ -475,8 +486,10 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             // Dashbaord service is a dcoker image downloaded at run time.
             // So wait for some time and check if dashbaord service is up running.
             while (retryCounter < maxRetries) {
-                s_logger.debug("Waiting for dashboard service for the container cluster: " + containerCluster.getName()
-                        + " to come up. Attempt: " + retryCounter + " of max retries " +  maxRetries);
+                if (s_logger.isDebugEnabled()) {
+                    s_logger.debug("Waiting for dashboard service for the container cluster: " + containerCluster.getName()
+                            + " to come up. Attempt: " + retryCounter + " of max retries " + maxRetries);
+                }
                 if (isAddOnServiceRunning(containerCluster.getId(), "kubernetes-dashboard")) {
                     stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
                     _containerClusterDao.update(containerCluster.getId(), containerCluster);
@@ -522,7 +535,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             BufferedReader b = new BufferedReader(new InputStreamReader(p.getInputStream()));
             String line = "";
             while ((line = b.readLine()) != null) {
-                s_logger.debug("KUBECTL : " + line);
+                if (s_logger.isDebugEnabled()) {
+                    s_logger.debug("KUBECTL : " + line);
+                }
                 if (line.contains(svcName) && line.contains("Running")) {
                     if (s_logger.isDebugEnabled()) {
                         s_logger.debug("Service :" + svcName + " for the container cluster "
@@ -558,7 +573,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 || cluster.getState().equals(ContainerCluster.State.Alert)
                 || cluster.getState().equals(ContainerCluster.State.Error)
                 || cluster.getState().equals(ContainerCluster.State.Destroying))) {
-            s_logger.debug("Cannot perform delete operation on cluster:" + cluster.getName() + " in state " + cluster.getState() );
+            if (s_logger.isDebugEnabled()) {
+                s_logger.debug("Cannot perform delete operation on cluster:" + cluster.getName() + " in state " + cluster.getState() );
+            }
             throw new PermissionDeniedException("Cannot perform delete operation on cluster: " + cluster.getName() + " in state" + cluster.getState() );
         }
 
@@ -618,12 +635,18 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 s_logger.debug("Not deleting the network as there are VM's that are not expunged in container cluster " + cluster.getName());
             }
             stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+            cluster = _containerClusterDao.findById(containerClusterId);
+            cluster.markContainerClusterForGC();
+            _containerClusterDao.update(cluster.getId(), cluster);
             return false;
         }
 
         if (failedNetworkDestroy) {
             s_logger.warn("Container cluster: " + cluster.getName() + " failed to get destroyed as network in the cluster is not expunged.");
             stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+            cluster = _containerClusterDao.findById(containerClusterId);
+            cluster.markContainerClusterForGC();
+            _containerClusterDao.update(cluster.getId(), cluster);
             return false;
         }
 
@@ -1008,5 +1031,61 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         cmdList.add(DeleteContainerClusterCmd.class);
         cmdList.add(ListContainerClusterCmd.class);
         return cmdList;
+    }
+
+    public class ContainerClusterGarbageCollector extends ManagedContextRunnable {
+        @Override
+        protected void runInContext() {
+            s_logger.debug("Running container cluster garbage collector.");
+            GlobalLock gcLock = GlobalLock.getInternLock("ContainerCluster.GC.Lock");
+            try {
+                if (gcLock.lock(3)) {
+                    try {
+                        reallyRun();
+                    } finally {
+                        gcLock.unlock();
+                    }
+                }
+            } finally {
+                gcLock.releaseRef();
+            }
+        }
+
+        public void reallyRun() {
+            try {
+                List<ContainerClusterVO> containerClusters = _containerClusterDao.findContainerClustersToGarbageCollect();
+                for (ContainerCluster containerCluster:containerClusters ) {
+                    try {
+                        if (deleteContainerCluster(containerCluster.getId())) {
+                            if (s_logger.isDebugEnabled()) {
+                                s_logger.debug("Container cluster: " + containerCluster.getName() + " is successfully garbage collected");
+                            }
+                        }
+                    } catch (Exception e) {
+
+                    }
+                }
+            } catch (Exception e) {
+                s_logger.warn("Caught exception while running container cluster gc: ", e);
+            }
+        }
+    }
+
+    @Override
+    public boolean start() {
+        try {
+            _executor.scheduleWithFixedDelay(new ContainerClusterGarbageCollector(), 300, 300, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            s_logger.debug("Failed to scheduleWithFixedDelay");
+        }
+        return true;
+    }
+
+    @Override
+    public boolean configure(String name, Map<String, Object> params) throws ConfigurationException {
+        _name = name;
+        _configParams = params;
+        _executor = Executors.newScheduledThreadPool(1, new NamedThreadFactory("Container-Cluster-Scavenger"));
+        return true;
     }
 }

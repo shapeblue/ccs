@@ -245,6 +245,9 @@ public class ContainerClusterVO implements ContainerCluster {
     @Column(name = GenericDao.REMOVED_COLUMN)
     protected Date removed;
 
+    @Column(name = "gc")
+    boolean garbageCollect;
+
     public ContainerClusterVO() {
 
     }
@@ -268,6 +271,7 @@ public class ContainerClusterVO implements ContainerCluster {
         this.memory = memory;
         this.endpoint = endpoint;
         this.consoleEndpoint = consoleEndpoint;
+        this.garbageCollect = false;
     }
 
     @Override
@@ -284,4 +288,13 @@ public class ContainerClusterVO implements ContainerCluster {
     public Date getRemoved() {
         return removed;
     }
+
+    public boolean isMarkedForGC() {
+        return garbageCollect;
+    }
+
+    public void markContainerClusterForGC() {
+        this.garbageCollect = true;
+    }
+
 }

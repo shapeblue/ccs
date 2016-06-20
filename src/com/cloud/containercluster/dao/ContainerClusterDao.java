@@ -27,4 +27,5 @@ public interface ContainerClusterDao extends GenericDao<ContainerClusterVO, Long
         StateDao<ContainerCluster.State, ContainerCluster.Event, ContainerCluster> {
 
     List<ContainerClusterVO> listByAccount(long accountId);
+    List<ContainerClusterVO> findContainerClustersToGarbageCollect();
 }
