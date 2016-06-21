@@ -37,7 +37,7 @@ import com.cloud.containercluster.ContainerClusterService;
         responseView = ResponseView.Restricted,
         requestHasSensitiveInfo = false,
         responseHasSensitiveInfo = true,
-        authorized = {RoleType.Admin, RoleType.DomainAdmin, RoleType.User})
+        authorized = {RoleType.Admin, RoleType.ResourceAdmin, RoleType.DomainAdmin, RoleType.User})
 public class ListContainerClusterCmd extends BaseListCmd {
 
     public static final Logger s_logger = Logger.getLogger(ListContainerClusterCmd.class.getName());

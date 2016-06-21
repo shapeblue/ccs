@@ -20,4 +20,6 @@ package com.cloud.containercluster;
 public class CcsEventTypes {
     public static final String EVENT_CONTAINER_CLUSTER_CREATE = "CONTAINER.CLUSTER.CREATE";
     public static final String EVENT_CONTAINER_CLUSTER_DELETE = "CONTAINER.CLUSTER.DELETE";
+    public static final String EVENT_CONTAINER_CLUSTER_START = "CONTAINER.CLUSTER.START";
+    public static final String EVENT_CONTAINER_CLUSTER_STOP = "CONTAINER.CLUSTER.STOP";
 }

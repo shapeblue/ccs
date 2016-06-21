@@ -18,21 +18,31 @@
 package com.cloud.containercluster;
 
 import com.cloud.api.ApiDBUtils;
+import com.cloud.capacity.CapacityManager;
 import com.cloud.containercluster.dao.ContainerClusterDao;
 import com.cloud.containercluster.dao.ContainerClusterDetailsDao;
 import com.cloud.containercluster.dao.ContainerClusterVmMapDao;
+import com.cloud.dc.ClusterDetailsDao;
+import com.cloud.dc.ClusterDetailsVO;
+import com.cloud.dc.ClusterVO;
 import com.cloud.dc.DataCenter;
-import com.cloud.dc.dao.DataCenterDao;
 import com.cloud.dc.DataCenterVO;
+import com.cloud.dc.dao.ClusterDao;
+import com.cloud.dc.dao.DataCenterDao;
 import com.cloud.deploy.DeployDestination;
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.InsufficientCapacityException;
+import com.cloud.exception.InsufficientServerCapacityException;
 import com.cloud.exception.InvalidParameterValueException;
 import com.cloud.exception.ManagementServerException;
 import com.cloud.exception.NetworkRuleConflictException;
 import com.cloud.exception.PermissionDeniedException;
 import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
+import com.cloud.host.Host.Type;
+import com.cloud.host.HostVO;
+import com.cloud.network.Network;
+import com.cloud.network.Network.Service;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.NetworkService;
 import com.cloud.network.PhysicalNetwork;
@@ -47,21 +57,27 @@ import com.cloud.network.rules.PortForwardingRuleVO;
 import com.cloud.network.rules.RulesService;
 import com.cloud.network.rules.dao.PortForwardingRulesDao;
 import com.cloud.offering.NetworkOffering;
+import com.cloud.offering.ServiceOffering;
 import com.cloud.offerings.NetworkOfferingVO;
 import com.cloud.offerings.dao.NetworkOfferingDao;
 import com.cloud.offerings.dao.NetworkOfferingServiceMapDao;
 import com.cloud.org.Grouping;
-import com.cloud.service.dao.ServiceOfferingDao;
+import com.cloud.resource.ResourceManager;
 import com.cloud.service.ServiceOfferingVO;
+import com.cloud.service.dao.ServiceOfferingDao;
 import com.cloud.storage.VMTemplateVO;
 import com.cloud.storage.dao.VMTemplateDao;
+import com.cloud.template.VirtualMachineTemplate;
+import com.cloud.user.Account;
 import com.cloud.user.AccountManager;
 import com.cloud.user.SSHKeyPairVO;
 import com.cloud.user.User;
 import com.cloud.user.dao.AccountDao;
 import com.cloud.user.dao.SSHKeyPairDao;
 import com.cloud.uservm.UserVm;
+import com.cloud.utils.Pair;
 import com.cloud.utils.component.ComponentContext;
+import com.cloud.utils.component.ManagerBase;
 import com.cloud.utils.db.Transaction;
 import com.cloud.utils.db.TransactionCallback;
 import com.cloud.utils.db.TransactionCallbackWithException;
@@ -74,11 +90,6 @@ import com.cloud.vm.UserVmService;
 import com.cloud.vm.UserVmVO;
 import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.dao.UserVmDao;
-import com.cloud.network.Network;
-import com.cloud.offering.ServiceOffering;
-import com.cloud.template.VirtualMachineTemplate;
-import com.cloud.user.Account;
-import com.cloud.utils.component.ManagerBase;
 import org.apache.cloudstack.acl.ControlledEntity;
 import org.apache.cloudstack.acl.SecurityChecker;
 import org.apache.cloudstack.api.ApiErrorCode;
@@ -87,34 +98,38 @@ import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.command.user.containercluster.CreateContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.DeleteContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.StartContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.StopContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.firewall.CreateFirewallRuleCmd;
 import org.apache.cloudstack.api.command.user.vm.StartVMCmd;
-import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
+import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
+import org.apache.commons.codec.binary.Base64;
 import org.apache.log4j.Logger;
 
 import javax.ejb.Local;
 import javax.inject.Inject;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.StringWriter;
-import java.io.PrintWriter;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.net.Socket;
-import java.security.SecureRandom;
-import org.apache.commons.codec.binary.Base64;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Local(value = {ContainerClusterManager.class})
 public class ContainerClusterManagerImpl extends ManagerBase implements ContainerClusterManager, ContainerClusterService {
@@ -166,13 +181,27 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     @Inject
     public NetworkOfferingServiceMapDao _ntwkOfferingServiceMapDao;
     @Inject
-    private AccountManager _accountMgr;
+    protected AccountManager _accountMgr;
     @Inject
-    private ContainerClusterVmMapDao _containerClusterVmMapDao;
+    protected ContainerClusterVmMapDao _containerClusterVmMapDao;
     @Inject
-    private ServiceOfferingDao _srvOfferingDao;
+    protected ServiceOfferingDao _srvOfferingDao;
     @Inject
-    private UserVmDao _userVmDao;
+    protected UserVmDao _userVmDao;
+    @Inject
+    protected CapacityManager _capacityMgr;
+    @Inject
+    protected ResourceManager _resourceMgr;
+    @Inject
+    protected ClusterDetailsDao _clusterDetailsDao;
+    @Inject
+    protected ClusterDao _clusterDao;
+
+
+    @Override
+    public ContainerCluster findById(final Long id) {
+        return _containerClusterDao.findById(id);
+    }
 
     @Override
     public ContainerCluster createContainerCluster(final String name,
@@ -214,20 +243,25 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
         }
 
+        if (!isContainerServiceConfigured(zone)) {
+            throw new ManagementServerException("Container service has not been configured properly to provision clusters.");
+        }
+
+        if (!validateServiceOffering(_srvOfferingDao.findById(serviceOfferingId))) {
+            throw new InvalidParameterValueException("This service offering is not suitable for k8s cluster, service offering id is " + networkId);
+        }
+
         Network network = null;
         if (networkId != null) {
             network = _networkService.getNetwork(networkId);
             if (network == null) {
                 throw new InvalidParameterValueException("Unable to find network by ID " + networkId);
             }
+            else if (! validateNetwork(network)){
+                throw new InvalidParameterValueException("This network is not suitable for k8s cluster, network id is " + networkId);
+            }
         }
-
-        if (!isContainerServiceConfigured(zone)) {
-            throw new ManagementServerException("Container service has not been configured properly to provision clusters.");
-        }
-
-        // user has not specified network in which cluster VM's to be provisioned, so create a network for container cluster
-        if (networkId == null) {
+        else { // user has not specified network in which cluster VM's to be provisioned, so create a network for container cluster
             NetworkOfferingVO networkOffering = _networkOfferingDao.findByUniqueName(
                     _globalConfigDao.getValue(CcsConfig.ContainerClusterNetworkOffering.key()));
 
@@ -286,8 +320,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         Account account = _accountDao.findById(containerCluster.getAccountId());
 
-        DataCenter dc = _dcDao.findById(containerCluster.getZoneId());
-        final DeployDestination dest = new DeployDestination(dc, null, null, null);
+        final DeployDestination dest = plan(containerClusterId, containerCluster.getZoneId());
         final ReservationContext context = new ReservationContextImpl(null, null, null, account);
 
         try {
@@ -498,6 +531,140 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 "Failed to deploy container cluster: " + containerCluster.getId() + " as unable to setup up in usable state");
     }
 
+    public boolean validateNetwork(Network network) {
+        NetworkOffering nwkoff = _networkOfferingDao.findById(network.getNetworkOfferingId());
+        if (nwkoff.isSystemOnly()){
+            throw new InvalidParameterValueException("This network is for system use only, network id " + network.getId());
+        }
+        if (! _networkModel.areServicesSupportedInNetwork(network.getId(), Service.UserData)){
+            throw new InvalidParameterValueException("This network does not support userdata that is required for k8s, network id " + network.getId());
+        }
+        if (! _networkModel.areServicesSupportedInNetwork(network.getId(), Service.Firewall)){
+            throw new InvalidParameterValueException("This network does not support firewall that is required for k8s, network id " + network.getId());
+        }
+        if (! _networkModel.areServicesSupportedInNetwork(network.getId(), Service.PortForwarding)){
+            throw new InvalidParameterValueException("This network does not support port forwarding that is required for k8s, network id " + network.getId());
+        }
+        if (! _networkModel.areServicesSupportedInNetwork(network.getId(), Service.Dhcp)){
+            throw new InvalidParameterValueException("This network does not support dhcp that is required for k8s, network id " + network.getId());
+        }
+        return true;
+    }
+
+    public boolean validateServiceOffering(ServiceOffering offering) {
+        final int cpu_requested = offering.getCpu() * offering.getSpeed();
+        final int ram_requested = offering.getRamSize();
+        if (offering.isDynamic()){
+            throw new InvalidParameterValueException("This service offering is not suitable for k8s cluster as this is dynamic, service offering id is " + offering.getId());
+        }
+        if (ram_requested < 64){
+            throw new InvalidParameterValueException("This service offering is not suitable for k8s cluster as this has less than 256M of Ram, service offering id is " +  offering.getId());
+        }
+        if( cpu_requested < 200) {
+            throw new InvalidParameterValueException("This service offering is not suitable for k8s cluster as this has less than 600MHz of CPU, service offering id is " +  offering.getId());
+        }
+        return true;
+    }
+
+    public DeployDestination plan(final long containerClusterId, final long dcId) throws InsufficientServerCapacityException {
+        ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
+        ServiceOffering offering = _srvOfferingDao.findById(containerCluster.getServiceOfferingId());
+
+        if (s_logger.isDebugEnabled()){
+            s_logger.debug("Checking deployment destination for containerClusterId= " + containerClusterId + " in dcId=" + dcId);
+        }
+
+        final int cpu_requested = offering.getCpu() * offering.getSpeed();
+        final long ram_requested = offering.getRamSize() * 1024L * 1024L;
+        List<HostVO> hosts = _resourceMgr.listAllHostsInAllZonesByType(Type.Routing);
+        final Map<String, Pair<HostVO, Integer>> hosts_with_resevered_capacity = new ConcurrentHashMap<String, Pair<HostVO, Integer>>();
+        for (HostVO h : hosts) {
+           hosts_with_resevered_capacity.put(h.getUuid(), new Pair<HostVO, Integer>(h, 0));
+        }
+        boolean suitable_host_found=false;
+        for (int i=1; i <= containerCluster.getNodeCount() + 1; i++) {
+            suitable_host_found=false;
+            for (Map.Entry<String, Pair<HostVO, Integer>> hostEntry : hosts_with_resevered_capacity.entrySet()) {
+                Pair<HostVO, Integer> hp = hostEntry.getValue();
+                HostVO h = hp.first();
+                int reserved = hp.second();
+                reserved++;
+                ClusterVO cluster = _clusterDao.findById(h.getClusterId());
+                ClusterDetailsVO cluster_detail_cpu = _clusterDetailsDao.findDetail(cluster.getId(), "cpuOvercommitRatio");
+                ClusterDetailsVO cluster_detail_ram = _clusterDetailsDao.findDetail(cluster.getId(), "memoryOvercommitRatio");
+                Float cpuOvercommitRatio = Float.parseFloat(cluster_detail_cpu.getValue());
+                Float memoryOvercommitRatio = Float.parseFloat(cluster_detail_ram.getValue());
+                if (s_logger.isDebugEnabled()){
+                    s_logger.debug("Checking host " + h.getId() + " for capacity already reserved " + reserved);
+                }
+                if (_capacityMgr.checkIfHostHasCapacity(h.getId(), cpu_requested * reserved, ram_requested * reserved, false, cpuOvercommitRatio, memoryOvercommitRatio, true)) {
+                    if (s_logger.isDebugEnabled()){
+                        s_logger.debug("Found host " + h.getId() + " has enough capacity cpu = " + cpu_requested * reserved + " ram =" + ram_requested * reserved);
+                    }
+                    hostEntry.setValue(new Pair<HostVO, Integer>(h, reserved));
+                    suitable_host_found = true;
+                    break;
+                }
+            }
+            if (suitable_host_found){
+                continue;
+            }
+            else {
+                 if (s_logger.isDebugEnabled()){
+                     s_logger.debug("Suitable hosts not found in datacenter " + dcId + " for node " + i);
+                 }
+                break;
+            }
+        }
+        if (suitable_host_found){
+            if (s_logger.isDebugEnabled()){
+                s_logger.debug("Suitable hosts found in datacenter " + dcId + " creating deployment destination");
+            }
+            return new DeployDestination(_dcDao.findById(dcId), null, null, null);
+        }
+        s_logger.warn(String.format("Cannot find enough capacity for container_cluster(requested cpu=%1$s memory=%2$s)",
+                cpu_requested*containerCluster.getNodeCount(), ram_requested*containerCluster.getNodeCount()));
+        throw new InsufficientServerCapacityException(String.format("Cannot find enough capacity for container_cluster(requested cpu=%1$s memory=%2$s)",
+                cpu_requested*containerCluster.getNodeCount(), ram_requested*containerCluster.getNodeCount()), DataCenter.class, dcId);
+    }
+
+    @Override
+    public boolean stopContainerCluster(long containerClusterId) throws ManagementServerException {
+        final ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
+
+        if (containerCluster == null) {
+            throw new ManagementServerException("Failed to find container cluster id: " + containerClusterId);
+        }
+
+        if (containerCluster.getState().equals("Stopped")) {
+            return true;
+        }
+
+        if (s_logger.isDebugEnabled()) {
+            s_logger.debug("Stopping container cluster: " + containerCluster.getName());
+        }
+
+        updateContainerClusterState(containerClusterId, "Stopping");
+
+        for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
+            try {
+                stopK8SVM(vmMapVO);
+            } catch (ServerApiException ex) {
+                updateContainerClusterState(containerClusterId, "Stopping");
+            }
+        }
+
+        for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
+            final UserVmVO vm = _userVmDao.findById(vmMapVO.getVmId());
+            if (!vm.getState().equals(VirtualMachine.State.Stopped)) {
+                throw new ManagementServerException("Failed to stop all VMs in container cluster id: " + containerClusterId);
+            }
+        }
+
+        updateContainerClusterState(containerClusterId, "Stopped");
+        return true;
+    }
+
     private boolean isAddOnServiceRunning(Long clusterId, String svcName) {
 
         ContainerClusterVO containerCluster = _containerClusterDao.findById(clusterId);
@@ -665,7 +832,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.error("Failed to read kubernetes master configuration file");
         }
 
-        String base64UserData = Base64.encodeBase64String(k8sMasterConfig.getBytes());
+        String base64UserData = Base64.encodeBase64String(k8sMasterConfig.getBytes(Charset.forName("UTF-8")));
 
 
         masterVm = _userVmService.createAdvancedVirtualMachine(zone, serviceOffering, template, networkIds, owner,
@@ -742,7 +909,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             throw new ManagementServerException("Failed to read cluster node configuration file.");
         }
 
-        String base64UserData = Base64.encodeBase64String(k8sNodeConfig.getBytes());
+        String base64UserData = Base64.encodeBase64String(k8sNodeConfig.getBytes(Charset.forName("UTF-8")));
 
         nodeVm = _userVmService.createAdvancedVirtualMachine(zone, serviceOffering, template, networkIds, owner,
                 hostName, containerCluster.getDescription(), null, null, null,
@@ -785,6 +952,15 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         }
 
         return nodeVm;
+    }
+
+    private void stopK8SVM(final ContainerClusterVmMapVO vmMapVO) throws ServerApiException {
+        try {
+            _userVmService.stopVirtualMachine(vmMapVO.getVmId(), false);
+        } catch (ConcurrentOperationException ex) {
+            s_logger.warn("Failed to stop container cluster VM due to Exception: ", ex);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, ex.getMessage());
+        }
     }
 
     @Override
@@ -984,6 +1160,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     public List<Class<?>> getCommands() {
         List<Class<?>> cmdList = new ArrayList<Class<?>>();
         cmdList.add(CreateContainerClusterCmd.class);
+        cmdList.add(StartContainerClusterCmd.class);
+        cmdList.add(StopContainerClusterCmd.class);
         cmdList.add(DeleteContainerClusterCmd.class);
         cmdList.add(ListContainerClusterCmd.class);
         return cmdList;
