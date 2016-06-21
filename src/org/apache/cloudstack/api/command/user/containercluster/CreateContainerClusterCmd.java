@@ -209,7 +209,7 @@ public class CreateContainerClusterCmd extends BaseAsyncCreateCmd {
         ContainerCluster containerCluster;
 
         try {
-            _containerClusterService.startContainerCluster(getEntityId());
+            _containerClusterService.startContainerCluster(getEntityId(), true);
             ContainerClusterResponse response = _containerClusterService.createContainerClusterResponse(getEntityId());
             response.setResponseName(getCommandName());
             setResponseObject(response);

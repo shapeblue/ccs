@@ -73,7 +73,9 @@ import com.cloud.vm.ReservationContextImpl;
 import com.cloud.vm.UserVmService;
 import com.cloud.vm.UserVmVO;
 import com.cloud.vm.VirtualMachine;
+import com.cloud.vm.VMInstanceVO;
 import com.cloud.vm.dao.UserVmDao;
+import com.cloud.vm.dao.VMInstanceDao;
 import com.cloud.network.Network;
 import com.cloud.offering.ServiceOffering;
 import com.cloud.template.VirtualMachineTemplate;
@@ -130,7 +132,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
     private static final Logger s_logger = Logger.getLogger(ContainerClusterManagerImpl.class);
     protected StateMachine2<ContainerCluster.State, ContainerCluster.Event, ContainerCluster> _stateMachine = ContainerCluster.State.getStateMachine();
-    ScheduledExecutorService _executor;
+    ScheduledExecutorService _gcExecutor;
+    ScheduledExecutorService _stateScanner;
 
     @Inject
     ContainerClusterDao _containerClusterDao;
@@ -184,6 +187,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     private ServiceOfferingDao _srvOfferingDao;
     @Inject
     private UserVmDao _userVmDao;
+    @Inject
+    protected VMInstanceDao _vmInstanceDao;
 
     @Override
     public ContainerCluster createContainerCluster(final String name,
@@ -283,10 +288,27 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return cluster;
     }
 
+
+    // Start operation can be performed at diffrent stages of container cluster. First when a freshly created cluster
+    // in which case there are no resources provisisioned for the container cluster. So during start all the resources
+    // are provisioned from scratch. Secondar kind of start (happening from Stopped->Start), in which all resources
+    // are provisioned (like volumes, nics, networks etc). It just that VM's are not in running state. So just
+    // start the VM's which can possibley result in start of the network also.
     @Override
-    public ContainerCluster startContainerCluster(long containerClusterId) throws ManagementServerException,
+    public ContainerCluster startContainerCluster(long containerClusterId, boolean onCreate) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
 
+        if (onCreate) {
+            return startContainerClusterOnCreate(containerClusterId);
+        } else {
+            // resources are already provisioned, just need to be started
+            return null;
+        }
+    }
+
+    // perform a cold start (which will provision resources as well)
+    private ContainerCluster startContainerClusterOnCreate(long containerClusterId) throws ManagementServerException,
+            ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
         ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
 
         if (s_logger.isDebugEnabled()) {
@@ -310,7 +332,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.warn("Failed to start the network while creating container cluster due to: " + e);
             throw new ManagementServerException("Failed to start the network while creating container cluster " + containerCluster.getName());
         } catch(Exception e) {
-            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
             s_logger.warn("Starting the network failed as part of starting container cluster " + containerCluster.getName() + " due to " + e);
             throw new ManagementServerException("Failed to start the network while creating container cluster " + containerCluster.getName());
         }
@@ -322,7 +344,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 s_logger.debug("Provisioned the master VM's in to the container cluster: " + containerCluster.getName());
             }
         } catch (Exception e) {
-            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
             s_logger.warn("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName() + " due to " + e);
             throw new ManagementServerException("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName());
         }
@@ -357,7 +379,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     s_logger.debug("Provisioned a node VM in to the container cluster: " + containerCluster.getName());
                 }
             } catch (Exception e) {
-                stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
                 s_logger.warn("Provisioning the node VM failed in the container cluster " + containerCluster.getName() + " due to " + e);
                 throw new ManagementServerException("Provisioning the node VM failed in the container cluster " + containerCluster.getName());
             }
@@ -425,7 +447,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         } catch (Exception e) {
             s_logger.warn("Failed to provision firewall rules for the container cluster: " + containerCluster.getName()
                     + " due to exception: " + getStackTrace(e));
-            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
             throw new ManagementServerException("Failed to provision firewall rules for the container " +
                     "cluster: " + containerCluster.getName());
         }
@@ -462,7 +484,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
         } catch (Exception e) {
             s_logger.warn("Failed to activate port forwarding rules for the container cluster " + containerCluster.getName() + " due to "  + e);
-            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
             throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName() + " due to " + e);
         }
 
@@ -483,20 +505,30 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         if (k8sApiServerSetup) {
             retryCounter = 0;
             maxRetries = 10;
-            // Dashbaord service is a dcoker image downloaded at run time.
+            // Dashbaord service is a docker image downloaded at run time.
             // So wait for some time and check if dashbaord service is up running.
             while (retryCounter < maxRetries) {
+
                 if (s_logger.isDebugEnabled()) {
                     s_logger.debug("Waiting for dashboard service for the container cluster: " + containerCluster.getName()
                             + " to come up. Attempt: " + retryCounter + " of max retries " + maxRetries);
                 }
+
                 if (isAddOnServiceRunning(containerCluster.getId(), "kubernetes-dashboard")) {
+
                     stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
+
                     _containerClusterDao.update(containerCluster.getId(), containerCluster);
                     containerCluster.setConsoleEndpoint("https://" + publicIp.getAddress() + "/api/v1/proxy/namespaces/kube-system/services/kubernetes-dashboard");
                     _containerClusterDao.update(containerCluster.getId(), containerCluster);
+
+                    if (s_logger.isDebugEnabled()) {
+                        s_logger.debug("Container cluster name:" + containerCluster.getName() + " is successfully started");
+                    }
+
                     return containerCluster;
                 }
+
                 try { Thread.sleep(30000);} catch (Exception ex) {}
                 retryCounter++;
             }
@@ -507,7 +539,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     " unable to bring the API server up");
         }
 
-        stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+        stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
 
         throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR,
                 "Failed to deploy container cluster: " + containerCluster.getId() + " as unable to setup up in usable state");
@@ -636,7 +668,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
             stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             cluster = _containerClusterDao.findById(containerClusterId);
-            cluster.markContainerClusterForGC();
+            cluster.setCheckForGc(true);
             _containerClusterDao.update(cluster.getId(), cluster);
             return false;
         }
@@ -645,15 +677,20 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.warn("Container cluster: " + cluster.getName() + " failed to get destroyed as network in the cluster is not expunged.");
             stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             cluster = _containerClusterDao.findById(containerClusterId);
-            cluster.markContainerClusterForGC();
+            cluster.setCheckForGc(true);
             _containerClusterDao.update(cluster.getId(), cluster);
             return false;
         }
 
         stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
+
+        cluster = _containerClusterDao.findById(containerClusterId);
+        cluster.setCheckForGc(false);
+        _containerClusterDao.update(cluster.getId(), cluster);
+
         _containerClusterDao.remove(cluster.getId());
         if (s_logger.isDebugEnabled()) {
-            s_logger.debug("Container cluster: " + cluster.getName() + " is successfully deleted");
+            s_logger.debug("Container cluster name:" + cluster.getName() + " is successfully deleted");
         }
         return true;
     }
@@ -1033,10 +1070,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return cmdList;
     }
 
+    // Garbage collector periodically run through the container clusters marked for GC. For each container cluster
+    // marked for GC, attempt is made to destroy cluster.
     public class ContainerClusterGarbageCollector extends ManagedContextRunnable {
         @Override
         protected void runInContext() {
-            s_logger.debug("Running container cluster garbage collector.");
             GlobalLock gcLock = GlobalLock.getInternLock("ContainerCluster.GC.Lock");
             try {
                 if (gcLock.lock(3)) {
@@ -1055,6 +1093,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             try {
                 List<ContainerClusterVO> containerClusters = _containerClusterDao.findContainerClustersToGarbageCollect();
                 for (ContainerCluster containerCluster:containerClusters ) {
+                    if (s_logger.isDebugEnabled()) {
+                        s_logger.debug("Running container cluster garbage collector on container cluster name:" + containerCluster.getName());
+                    }
                     try {
                         if (deleteContainerCluster(containerCluster.getId())) {
                             if (s_logger.isDebugEnabled()) {
@@ -1062,7 +1103,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                             }
                         }
                     } catch (Exception e) {
-
+                        if (s_logger.isDebugEnabled()) {
+                            s_logger.debug("Faied to destroy container cluster name:" + containerCluster.getName() + " due to " + e);
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -1071,13 +1114,122 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         }
     }
 
+    /* Container cluster scanner checks if the container cluster is in desired state. If it detects container cluster
+       is not in desired state, it will trigger an event and marks the container cluster to be 'Alert' state. For e.g a
+       container cluster in 'Running' state should mean all the cluster of node VM's in the custer should be running and
+       number of the node VM's should be of cluster size, and the master node VM's is running. It is possible due to
+       out of band changes by user or hosts going down, we may end up one or more VM's in stopped state. in which case
+       scanner detects these changes and marks the cluster in 'Alert' state. Similarly cluster in 'Stopped' state means
+       all the cluster VM's are in stopped state any mismatch in states should get picked up by container cluster and
+       mark the container cluster to be 'Alert' state. Through recovery API, or reconciliation clusters in 'Alert' will
+       be brought back to known good state or desired state.
+     */
+    public class ContainerClusterStatusScanner extends ManagedContextRunnable {
+        @Override
+        protected void runInContext() {
+            GlobalLock gcLock = GlobalLock.getInternLock("ContainerCluster.State.Scanner.Lock");
+            try {
+                if (gcLock.lock(3)) {
+                    try {
+                        reallyRun();
+                    } finally {
+                        gcLock.unlock();
+                    }
+                }
+            } finally {
+                gcLock.releaseRef();
+            }
+        }
+
+        public void reallyRun() {
+            try {
+                // run through container clusters in 'Running' state and ensure all the VM's are Running in the cluster
+                List<ContainerClusterVO> runningContainerClusters = _containerClusterDao.findContainerClustersInState(ContainerCluster.State.Running);
+                for (ContainerCluster containerCluster : runningContainerClusters ) {
+                    if (s_logger.isDebugEnabled()) {
+                        s_logger.debug("Running container cluster state scanner on container cluster name:" + containerCluster.getName());
+                    }
+                    try {
+                        if (!isClusterInDesiredState(containerCluster, VirtualMachine.State.Running)) {
+                            stateTransitTo(containerCluster.getId(), ContainerCluster.Event.FaultsDetected);
+                        }
+                    } catch (Exception e) {
+                        s_logger.warn("Failed to run through VM states of container cluster due to " + e);
+                    }
+                }
+
+                // run through container clusters in 'Stopped' state and ensure all the VM's are Stopped in the cluster
+                List<ContainerClusterVO> stoppedContainerClusters = _containerClusterDao.findContainerClustersInState(ContainerCluster.State.Stopped);
+                for (ContainerCluster containerCluster : stoppedContainerClusters ) {
+                    if (s_logger.isDebugEnabled()) {
+                        s_logger.debug("Running container cluster state scanner on container cluster name:" + containerCluster.getName());
+                    }
+                    try {
+                        if (!isClusterInDesiredState(containerCluster, VirtualMachine.State.Stopped)) {
+                            stateTransitTo(containerCluster.getId(), ContainerCluster.Event.FaultsDetected);
+                        }
+                    } catch (Exception e) {
+                        s_logger.warn("Failed to run through VM states of container cluster due to " + e);
+                    }
+                }
+
+                // run through container clusters in 'Alert' state and reconcile state as 'Running' if the VM's are running
+                List<ContainerClusterVO> alertContainerClusters = _containerClusterDao.findContainerClustersInState(ContainerCluster.State.Alert);
+                for (ContainerCluster containerCluster : alertContainerClusters ) {
+                    if (s_logger.isDebugEnabled()) {
+                        s_logger.debug("Running container cluster state scanner on container cluster name:" + containerCluster.getName());
+                    }
+                    try {
+                        if (isClusterInDesiredState(containerCluster, VirtualMachine.State.Running)) {
+                            // mark the cluster to be running
+                            stateTransitTo(containerCluster.getId(), ContainerCluster.Event.RecoveryRequested);
+                            stateTransitTo(containerCluster.getId(), ContainerCluster.Event.OperationSucceeded);
+                        }
+                    } catch (Exception e) {
+                        s_logger.warn("Failed to run through VM states of container cluster due to " + e);
+                    }
+                }
+
+            } catch (Exception e) {
+                s_logger.warn("Caught exception while running container cluster gc: ", e);
+            }
+        }
+    }
+
+    // checks if container cluster is in desired state
+    boolean isClusterInDesiredState(ContainerCluster containerCluster, VirtualMachine.State state) {
+        List<ContainerClusterVmMapVO> clusterVMs = _containerClusterVmMapDao.listByClusterId(containerCluster.getId());
+
+        // check if all the VM's are in same state
+        for (ContainerClusterVmMapVO clusterVm : clusterVMs) {
+            VMInstanceVO vm = _vmInstanceDao.findByIdIncludingRemoved(clusterVm.getVmId());
+            if (vm.getState() != state) {
+                if (s_logger.isDebugEnabled()) {
+                    s_logger.debug("Found VM in the container cluster: " + containerCluster.getName() +
+                            " in state: " + vm.getState().toString() + " while expected to be in state: " + state.toString() +
+                            " So moving the cluster to Alert state for reconciliation.");
+                }
+                return false;
+            }
+        }
+
+        // check cluster is running at desired capacity include master node as well, so count should be cluster size + 1
+        if (clusterVMs.size() != (containerCluster.getNodeCount() + 1)) {
+            if (s_logger.isDebugEnabled()) {
+                s_logger.debug("Found only " + clusterVMs.size() + " VM's in the container cluster: " + containerCluster.getName() +
+                        " in state: " + state.toString() + " While expected number of VM's to " +
+                        " be in state: " + state.toString() + " is " + (containerCluster.getNodeCount() + 1) +
+                        " So moving the cluster to Alert state for reconciliation.");
+            }
+            return false;
+        }
+        return true;
+    }
+
     @Override
     public boolean start() {
-        try {
-            _executor.scheduleWithFixedDelay(new ContainerClusterGarbageCollector(), 300, 300, TimeUnit.SECONDS);
-        } catch (Exception e) {
-            s_logger.debug("Failed to scheduleWithFixedDelay");
-        }
+        _gcExecutor.scheduleWithFixedDelay(new ContainerClusterGarbageCollector(), 300, 300, TimeUnit.SECONDS);
+        _stateScanner.scheduleWithFixedDelay(new ContainerClusterStatusScanner(), 300, 30, TimeUnit.SECONDS);
         return true;
     }
 
@@ -1085,7 +1237,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     public boolean configure(String name, Map<String, Object> params) throws ConfigurationException {
         _name = name;
         _configParams = params;
-        _executor = Executors.newScheduledThreadPool(1, new NamedThreadFactory("Container-Cluster-Scavenger"));
+        _gcExecutor = Executors.newScheduledThreadPool(1, new NamedThreadFactory("Container-Cluster-Scavenger"));
+        _stateScanner = Executors.newScheduledThreadPool(1, new NamedThreadFactory("Container-Cluster-State-Scanner"));
         return true;
     }
 }

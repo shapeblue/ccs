@@ -246,7 +246,7 @@ public class ContainerClusterVO implements ContainerCluster {
     protected Date removed;
 
     @Column(name = "gc")
-    boolean garbageCollect;
+    boolean checkForGc;
 
     public ContainerClusterVO() {
 
@@ -271,7 +271,7 @@ public class ContainerClusterVO implements ContainerCluster {
         this.memory = memory;
         this.endpoint = endpoint;
         this.consoleEndpoint = consoleEndpoint;
-        this.garbageCollect = false;
+        this.checkForGc = false;
     }
 
     @Override
@@ -289,12 +289,12 @@ public class ContainerClusterVO implements ContainerCluster {
         return removed;
     }
 
-    public boolean isMarkedForGC() {
-        return garbageCollect;
+    public boolean ischeckForGc() {
+        return checkForGc;
     }
 
-    public void markContainerClusterForGC() {
-        this.garbageCollect = true;
+    public void setCheckForGc(boolean check) {
+        checkForGc = check;
     }
 
 }

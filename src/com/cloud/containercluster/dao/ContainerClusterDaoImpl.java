@@ -34,6 +34,7 @@ public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, 
 
     private final SearchBuilder<ContainerClusterVO> AccountIdSearch;
     private final SearchBuilder<ContainerClusterVO> GarbageCollectedSearch;
+    private final SearchBuilder<ContainerClusterVO> StateSearch;
 
     public ContainerClusterDaoImpl() {
         AccountIdSearch = createSearchBuilder();
@@ -41,8 +42,13 @@ public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, 
         AccountIdSearch.done();
 
         GarbageCollectedSearch = createSearchBuilder();
-        GarbageCollectedSearch.and("gc", GarbageCollectedSearch.entity().isMarkedForGC(), SearchCriteria.Op.EQ);
+        GarbageCollectedSearch.and("gc", GarbageCollectedSearch.entity().ischeckForGc(), SearchCriteria.Op.EQ);
+        GarbageCollectedSearch.and("state", GarbageCollectedSearch.entity().getState(), SearchCriteria.Op.NEQ);
         GarbageCollectedSearch.done();
+
+        StateSearch = createSearchBuilder();
+        StateSearch.and("state", StateSearch.entity().getState(), SearchCriteria.Op.EQ);
+        StateSearch.done();
     }
 
     @Override
@@ -54,9 +60,17 @@ public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, 
 
     @Override
     public List<ContainerClusterVO> findContainerClustersToGarbageCollect() {
-        SearchCriteria<ContainerClusterVO> sc = AccountIdSearch.create();
+        SearchCriteria<ContainerClusterVO> sc = GarbageCollectedSearch.create();
         sc.setParameters("gc", true);
-        return listBy(sc, null);
+        sc.setParameters("state", ContainerCluster.State.Destroying);
+        return listBy(sc);
+    }
+
+    @Override
+    public List<ContainerClusterVO> findContainerClustersInState(ContainerCluster.State state) {
+        SearchCriteria<ContainerClusterVO> sc = StateSearch.create();
+        sc.setParameters("state", state);
+        return listBy(sc);
     }
 
     @Override
