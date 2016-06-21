@@ -55,8 +55,7 @@ import org.apache.log4j.Logger;
         entityType = {ContainerCluster.class},
         requestHasSensitiveInfo = false,
         responseHasSensitiveInfo = true,
-        authorized = {RoleType.Admin, RoleType.DomainAdmin, RoleType.User}
-)
+        authorized = {RoleType.Admin, RoleType.ResourceAdmin, RoleType.DomainAdmin, RoleType.User})
 public class CreateContainerClusterCmd extends BaseAsyncCreateCmd {
 
     public static final Logger s_logger = Logger.getLogger(CreateContainerClusterCmd.class.getName());
