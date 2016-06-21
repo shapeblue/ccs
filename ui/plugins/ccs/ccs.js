@@ -321,6 +321,66 @@
                                 path: 'ccs.clusterinstances'
                             }],
                             actions: {
+                                start: {
+                                    label: 'Start Container Cluster',
+                                    action: function(args) {
+                                        $.ajax({
+                                            url: createURL("startContainerCluster"),
+                                            data: {"id": args.context.containerclusters[0].id},
+                                            dataType: "json",
+                                            async: true,
+                                            success: function(json) {
+                                                var jid = json.startcontainerclusterresponse.jobid;
+                                                args.response.success({
+                                                    _custom: {
+                                                        jobId: jid
+                                                    }
+                                                });
+                                            }
+                                        });
+                                    },
+                                    messages: {
+                                        confirm: function(args) {
+                                            return 'Please confirm that you want to start this container cluster.';
+                                        },
+                                        notification: function(args) {
+                                            return 'Started container cluster.';
+                                        }
+                                    },
+                                    notification: {
+                                        poll: pollAsyncJobResult
+                                    }
+                                },
+                                stop: {
+                                    label: 'Stop Container Cluster',
+                                    action: function(args) {
+                                        $.ajax({
+                                            url: createURL("stopContainerCluster"),
+                                            data: {"id": args.context.containerclusters[0].id},
+                                            dataType: "json",
+                                            async: true,
+                                            success: function(json) {
+                                                var jid = json.stopcontainerclusterresponse.jobid;
+                                                args.response.success({
+                                                    _custom: {
+                                                        jobId: jid
+                                                    }
+                                                });
+                                            }
+                                        });
+                                    },
+                                    messages: {
+                                        confirm: function(args) {
+                                            return 'Please confirm that you want to stop this container cluster.';
+                                        },
+                                        notification: function(args) {
+                                            return 'Stopped container cluster.';
+                                        }
+                                    },
+                                    notification: {
+                                        poll: pollAsyncJobResult
+                                    }
+                                },
                                 destroy: {
                                     label: 'Destroy Cluster',
                                     compactLabel: 'label.destroy',
@@ -332,8 +392,11 @@
                                         }
                                     },
                                     messages: {
+                                        confirm: function(args) {
+                                            return 'Please confirm that you want to destroy this container cluster.';
+                                        },
                                         notification: function(args) {
-                                            return 'Container Cluster Destroy';
+                                            return 'Destroyed container cluster.';
                                         }
                                     },
                                     action: function(args) {

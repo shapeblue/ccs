@@ -26,9 +26,9 @@ import com.cloud.dc.ClusterDetailsDao;
 import com.cloud.dc.ClusterDetailsVO;
 import com.cloud.dc.ClusterVO;
 import com.cloud.dc.DataCenter;
+import com.cloud.dc.DataCenterVO;
 import com.cloud.dc.dao.ClusterDao;
 import com.cloud.dc.dao.DataCenterDao;
-import com.cloud.dc.DataCenterVO;
 import com.cloud.deploy.DeployDestination;
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.InsufficientCapacityException;
@@ -41,6 +41,8 @@ import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.host.Host.Type;
 import com.cloud.host.HostVO;
+import com.cloud.network.Network;
+import com.cloud.network.Network.Service;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.NetworkService;
 import com.cloud.network.PhysicalNetwork;
@@ -55,15 +57,18 @@ import com.cloud.network.rules.PortForwardingRuleVO;
 import com.cloud.network.rules.RulesService;
 import com.cloud.network.rules.dao.PortForwardingRulesDao;
 import com.cloud.offering.NetworkOffering;
+import com.cloud.offering.ServiceOffering;
 import com.cloud.offerings.NetworkOfferingVO;
 import com.cloud.offerings.dao.NetworkOfferingDao;
 import com.cloud.offerings.dao.NetworkOfferingServiceMapDao;
 import com.cloud.org.Grouping;
 import com.cloud.resource.ResourceManager;
-import com.cloud.service.dao.ServiceOfferingDao;
 import com.cloud.service.ServiceOfferingVO;
+import com.cloud.service.dao.ServiceOfferingDao;
 import com.cloud.storage.VMTemplateVO;
 import com.cloud.storage.dao.VMTemplateDao;
+import com.cloud.template.VirtualMachineTemplate;
+import com.cloud.user.Account;
 import com.cloud.user.AccountManager;
 import com.cloud.user.SSHKeyPairVO;
 import com.cloud.user.User;
@@ -72,6 +77,7 @@ import com.cloud.user.dao.SSHKeyPairDao;
 import com.cloud.uservm.UserVm;
 import com.cloud.utils.Pair;
 import com.cloud.utils.component.ComponentContext;
+import com.cloud.utils.component.ManagerBase;
 import com.cloud.utils.db.Transaction;
 import com.cloud.utils.db.TransactionCallback;
 import com.cloud.utils.db.TransactionCallbackWithException;
@@ -84,12 +90,6 @@ import com.cloud.vm.UserVmService;
 import com.cloud.vm.UserVmVO;
 import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.dao.UserVmDao;
-import com.cloud.network.Network;
-import com.cloud.network.Network.Service;
-import com.cloud.offering.ServiceOffering;
-import com.cloud.template.VirtualMachineTemplate;
-import com.cloud.user.Account;
-import com.cloud.utils.component.ManagerBase;
 import org.apache.cloudstack.acl.ControlledEntity;
 import org.apache.cloudstack.acl.SecurityChecker;
 import org.apache.cloudstack.api.ApiErrorCode;
@@ -98,36 +98,38 @@ import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.command.user.containercluster.CreateContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.DeleteContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.StartContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.StopContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.firewall.CreateFirewallRuleCmd;
 import org.apache.cloudstack.api.command.user.vm.StartVMCmd;
-import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
+import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
+import org.apache.commons.codec.binary.Base64;
 import org.apache.log4j.Logger;
 
 import javax.ejb.Local;
 import javax.inject.Inject;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.StringWriter;
-import java.io.PrintWriter;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.net.Socket;
-import java.security.SecureRandom;
-import org.apache.commons.codec.binary.Base64;
 
 @Local(value = {ContainerClusterManager.class})
 public class ContainerClusterManagerImpl extends ManagerBase implements ContainerClusterManager, ContainerClusterService {
@@ -195,6 +197,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     @Inject
     protected ClusterDao _clusterDao;
 
+
+    @Override
+    public ContainerCluster findById(final Long id) {
+        return _containerClusterDao.findById(id);
+    }
 
     @Override
     public ContainerCluster createContainerCluster(final String name,
@@ -621,6 +628,42 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 cpu_requested*containerCluster.getNodeCount(), ram_requested*containerCluster.getNodeCount()), DataCenter.class, dcId);
     }
 
+    @Override
+    public boolean stopContainerCluster(long containerClusterId) throws ManagementServerException {
+        final ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
+
+        if (containerCluster == null) {
+            throw new ManagementServerException("Failed to find container cluster id: " + containerClusterId);
+        }
+
+        if (containerCluster.getState().equals("Stopped")) {
+            return true;
+        }
+
+        if (s_logger.isDebugEnabled()) {
+            s_logger.debug("Stopping container cluster: " + containerCluster.getName());
+        }
+
+        updateContainerClusterState(containerClusterId, "Stopping");
+
+        for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
+            try {
+                stopK8SVM(vmMapVO);
+            } catch (ServerApiException ex) {
+                updateContainerClusterState(containerClusterId, "Stopping");
+            }
+        }
+
+        for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
+            final UserVmVO vm = _userVmDao.findById(vmMapVO.getVmId());
+            if (!vm.getState().equals(VirtualMachine.State.Stopped)) {
+                throw new ManagementServerException("Failed to stop all VMs in container cluster id: " + containerClusterId);
+            }
+        }
+
+        updateContainerClusterState(containerClusterId, "Stopped");
+        return true;
+    }
 
     private boolean isAddOnServiceRunning(Long clusterId, String svcName) {
 
@@ -911,6 +954,15 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return nodeVm;
     }
 
+    private void stopK8SVM(final ContainerClusterVmMapVO vmMapVO) throws ServerApiException {
+        try {
+            _userVmService.stopVirtualMachine(vmMapVO.getVmId(), false);
+        } catch (ConcurrentOperationException ex) {
+            s_logger.warn("Failed to stop container cluster VM due to Exception: ", ex);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, ex.getMessage());
+        }
+    }
+
     @Override
     public ListResponse<ContainerClusterResponse>  listContainerClusters(ListContainerClusterCmd cmd) {
 
@@ -1108,6 +1160,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     public List<Class<?>> getCommands() {
         List<Class<?>> cmdList = new ArrayList<Class<?>>();
         cmdList.add(CreateContainerClusterCmd.class);
+        cmdList.add(StartContainerClusterCmd.class);
+        cmdList.add(StopContainerClusterCmd.class);
         cmdList.add(DeleteContainerClusterCmd.class);
         cmdList.add(ListContainerClusterCmd.class);
         return cmdList;
