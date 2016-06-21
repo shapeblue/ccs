@@ -3,7 +3,7 @@
     cloudStack.plugins.ccs = function(plugin) {
         plugin.ui.addSection({
             id: 'ccs',
-            title: 'CloudStack Container Service',
+            title: 'Container Service',
             showOnNavigation: true,
             preFilter: function(args) {
                 return isAdmin();
