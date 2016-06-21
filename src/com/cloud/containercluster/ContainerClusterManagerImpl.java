@@ -211,7 +211,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             throw new InvalidParameterValueException("Invalid name for the container cluster name: " + name);
         }
 
-        if (clusterSize < 1) {
+        if (clusterSize < 1 || clusterSize > 100) {
             throw new InvalidParameterValueException("invalid cluster size " + clusterSize);
         }
 
