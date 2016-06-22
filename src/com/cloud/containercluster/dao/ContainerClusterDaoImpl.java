@@ -16,16 +16,17 @@
 // under the License.
 package com.cloud.containercluster.dao;
 
-
 import com.cloud.utils.db.SearchBuilder;
 import com.cloud.utils.db.SearchCriteria;
+import com.cloud.utils.db.SearchCriteria.Op;
+
 import org.springframework.stereotype.Component;
 
 import com.cloud.containercluster.ContainerClusterVO;
 import com.cloud.utils.db.GenericDaoBase;
+import com.cloud.utils.db.QueryBuilder;
 
 import java.util.List;
-
 
 @Component
 public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, Long> implements ContainerClusterDao {
@@ -43,5 +44,12 @@ public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, 
         SearchCriteria<ContainerClusterVO> sc = AccountIdSearch.create();
         sc.setParameters("account", accountId);
         return listBy(sc, null);
+    }
+
+    @Override
+    public List<ContainerClusterVO> listByNetworkId(long networkId) {
+        QueryBuilder<ContainerClusterVO> sc = QueryBuilder.create(ContainerClusterVO.class);
+        sc.and(sc.entity().getNetworkId(), Op.EQ, networkId);
+        return sc.list();
     }
 }
