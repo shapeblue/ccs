@@ -16,30 +16,6 @@
 // under the License.
 package com.cloud.containercluster;
 
-import static org.mockito.Matchers.anyInt;
-import static org.mockito.Matchers.anyBoolean;
-import static org.mockito.Matchers.anyFloat;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Mockito.when;
-
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-
-import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
-import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
-import org.apache.log4j.Logger;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.mockito.Spy;
-import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
-import org.springframework.test.context.support.AnnotationConfigContextLoader;
-
 import com.cloud.capacity.CapacityManager;
 import com.cloud.containercluster.dao.ContainerClusterDao;
 import com.cloud.containercluster.dao.ContainerClusterDetailsDao;
@@ -47,8 +23,8 @@ import com.cloud.containercluster.dao.ContainerClusterVmMapDao;
 import com.cloud.dc.ClusterDetailsDao;
 import com.cloud.dc.ClusterDetailsVO;
 import com.cloud.dc.ClusterVO;
-import com.cloud.dc.DataCenterVO;
 import com.cloud.dc.DataCenter.NetworkType;
+import com.cloud.dc.DataCenterVO;
 import com.cloud.dc.dao.ClusterDao;
 import com.cloud.dc.dao.DataCenterDao;
 import com.cloud.deploy.DeployDestination;
@@ -69,7 +45,6 @@ import com.cloud.offerings.dao.NetworkOfferingServiceMapDao;
 import com.cloud.resource.ResourceManager;
 import com.cloud.service.ServiceOfferingVO;
 import com.cloud.service.dao.ServiceOfferingDao;
-import com.cloud.storage.Storage.ProvisioningType;
 import com.cloud.storage.Storage.StoragePoolType;
 import com.cloud.storage.dao.VMTemplateDao;
 import com.cloud.user.AccountManager;
@@ -78,6 +53,29 @@ import com.cloud.user.dao.SSHKeyPairDao;
 import com.cloud.vm.UserVmService;
 import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.dao.UserVmDao;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
+import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
+import org.apache.log4j.Logger;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.mockito.Spy;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+import org.springframework.test.context.support.AnnotationConfigContextLoader;
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+
+import static org.mockito.Matchers.anyBoolean;
+import static org.mockito.Matchers.anyFloat;
+import static org.mockito.Matchers.anyInt;
+import static org.mockito.Matchers.anyLong;
+import static org.mockito.Mockito.when;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration(loader = AnnotationConfigContextLoader.class)
@@ -182,7 +180,7 @@ public class ContainerClusterManagerImplTest {
         containerCluster.setServiceOfferingId(1L);
         containerCluster.setNodeCount(5);
         when(containerClusterDao.findById(1L)).thenReturn(containerCluster);
-        ServiceOfferingVO offering = new ServiceOfferingVO("test", 1, 500, 512, 0, 0, true, "test", ProvisioningType.THIN, false, true, "", true, VirtualMachine.Type.User, true);
+        ServiceOfferingVO offering = new ServiceOfferingVO("test", 1, 500, 512, 0, 0, true, "test", null, false, true, "", true, VirtualMachine.Type.User, true);
         when(srvOfferingDao.findById(1L)).thenReturn(offering);
 
         List<HostVO> hl = new ArrayList<HostVO>();
@@ -207,7 +205,7 @@ public class ContainerClusterManagerImplTest {
         containerCluster.setServiceOfferingId(1L);
         containerCluster.setNodeCount(0);
         when(containerClusterDao.findById(1L)).thenReturn(containerCluster);
-        ServiceOfferingVO offering = new ServiceOfferingVO("test", 1, 500, 512, 0, 0, true, "test", ProvisioningType.THIN, false, true, "", true, VirtualMachine.Type.User, true);
+        ServiceOfferingVO offering = new ServiceOfferingVO("test", 1, 500, 512, 0, 0, true, "test", null, false, true, "", true, null, true);
         when(srvOfferingDao.findById(1L)).thenReturn(offering);
 
         List<HostVO> hl = new ArrayList<HostVO>();
@@ -240,7 +238,7 @@ public class ContainerClusterManagerImplTest {
         containerCluster.setServiceOfferingId(1L);
         containerCluster.setNodeCount(0);
         when(containerClusterDao.findById(1L)).thenReturn(containerCluster);
-        ServiceOfferingVO offering = new ServiceOfferingVO("test", 1, 500, 512, 0, 0, true, "test", ProvisioningType.THIN, false, true, "", true, VirtualMachine.Type.User, true);
+        ServiceOfferingVO offering = new ServiceOfferingVO("test", 1, 500, 512, 0, 0, true, "test", null, false, true, "", true, VirtualMachine.Type.User, true);
         when(srvOfferingDao.findById(1L)).thenReturn(offering);
 
         List<HostVO> hl = new ArrayList<HostVO>();
