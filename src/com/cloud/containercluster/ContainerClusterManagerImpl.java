@@ -78,6 +78,7 @@ import com.cloud.uservm.UserVm;
 import com.cloud.utils.Pair;
 import com.cloud.utils.component.ComponentContext;
 import com.cloud.utils.component.ManagerBase;
+import com.cloud.utils.db.Filter;
 import com.cloud.utils.db.Transaction;
 import com.cloud.utils.db.TransactionCallback;
 import com.cloud.utils.db.TransactionCallbackWithException;
@@ -989,7 +990,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             responsesList.add(createContainerClusterResponse(cmd.getId()));
         } else {
             if (_accountMgr.isAdmin(caller.getId())) {
-                List<ContainerClusterVO> containerClusters = _containerClusterDao.listAll();
+
+                Filter searchFilter = new Filter(ContainerClusterVO.class, "id", true, cmd.getStartIndex(), cmd.getPageSizeVal());
+                List<ContainerClusterVO> containerClusters = _containerClusterDao.listAll(searchFilter);
                 for (ContainerClusterVO cluster : containerClusters) {
                     ContainerClusterResponse clusterReponse = createContainerClusterResponse(cluster.getId());
                     responsesList.add(clusterReponse);
