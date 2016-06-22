@@ -78,6 +78,7 @@ import com.cloud.uservm.UserVm;
 import com.cloud.utils.Pair;
 import com.cloud.utils.component.ComponentContext;
 import com.cloud.utils.component.ManagerBase;
+import com.cloud.utils.db.Filter;
 import com.cloud.utils.db.Transaction;
 import com.cloud.utils.db.TransactionCallback;
 import com.cloud.utils.db.TransactionCallbackWithException;
@@ -218,7 +219,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             throw new InvalidParameterValueException("Invalid name for the container cluster name: " + name);
         }
 
-        if (clusterSize < 1) {
+        if (clusterSize < 1 || clusterSize > 100) {
             throw new InvalidParameterValueException("invalid cluster size " + clusterSize);
         }
 
@@ -253,12 +254,17 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         Network network = null;
         if (networkId != null) {
-            network = _networkService.getNetwork(networkId);
-            if (network == null) {
-                throw new InvalidParameterValueException("Unable to find network by ID " + networkId);
+            if (_containerClusterDao.listByNetworkId(networkId).isEmpty()){
+                network = _networkService.getNetwork(networkId);
+                if (network == null) {
+                    throw new InvalidParameterValueException("Unable to find network by ID " + networkId);
+                }
+                else if (! validateNetwork(network)){
+                    throw new InvalidParameterValueException("This network is not suitable for k8s cluster, network id is " + networkId);
+                }
             }
-            else if (! validateNetwork(network)){
-                throw new InvalidParameterValueException("This network is not suitable for k8s cluster, network id is " + networkId);
+            else {
+                throw new InvalidParameterValueException("This network is already under use by another k8s cluster, network id is " + networkId);
             }
         }
         else { // user has not specified network in which cluster VM's to be provisioned, so create a network for container cluster
@@ -984,7 +990,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             responsesList.add(createContainerClusterResponse(cmd.getId()));
         } else {
             if (_accountMgr.isAdmin(caller.getId())) {
-                List<ContainerClusterVO> containerClusters = _containerClusterDao.listAll();
+
+                Filter searchFilter = new Filter(ContainerClusterVO.class, "id", true, cmd.getStartIndex(), cmd.getPageSizeVal());
+                List<ContainerClusterVO> containerClusters = _containerClusterDao.listAll(searchFilter);
                 for (ContainerClusterVO cluster : containerClusters) {
                     ContainerClusterResponse clusterReponse = createContainerClusterResponse(cluster.getId());
                     responsesList.add(clusterReponse);

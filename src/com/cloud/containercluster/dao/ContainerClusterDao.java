@@ -24,4 +24,6 @@ import java.util.List;
 public interface ContainerClusterDao extends GenericDao<ContainerClusterVO, Long> {
 
     List<ContainerClusterVO> listByAccount(long accountId);
+
+    List<ContainerClusterVO> listByNetworkId(long networkId);
 }

@@ -279,9 +279,11 @@
                         },
 
                         dataProvider: function(args) {
-                            var data = {};
+                            var data = {
+                                    page: args.page,
+                                    pagesize: pageSize
+                                };
                             listViewDataProvider(args, data);
-
                             if (args.filterBy != null) { //filter dropdown
                                 if (args.filterBy.kind != null) {
                                     switch (args.filterBy.kind) {
@@ -304,6 +306,8 @@
                             $.ajax({
                                 url: createURL("listContainerCluster"),
                                 data: data,
+                                dataType: "json",
+                                sync: true,
                                 success: function(json) {
                                     var items = json.listcontainerclusterresponse.containercluster;
                                     args.response.success({
