@@ -320,10 +320,6 @@
                         detailView: {
                             name: 'container cluster details',
                             isMaximized: true,
-                            viewAll: [{
-                                label: 'cluster VM instances',
-                                path: 'ccs.clusterinstances'
-                            }],
                             actions: {
                                 start: {
                                     label: 'Start Container Cluster',
@@ -441,7 +437,7 @@
                                             label: 'label.zone.name'
                                         },
                                         clustersize : {
-                                            label: 'label.clustersize'
+                                            label: 'Cluster Size'
                                         },
                                         cpunumber: {
                                             label: 'label.num.cpu.cores'
@@ -459,7 +455,7 @@
                                             label: 'label.network'
                                         },
                                         keypair: {
-                                            label: 'label.menu.sshkeypair'
+                                            label: 'Ssh Key Pair'
                                         },
                                         endpoint: {
                                             label: 'API endpoint',
