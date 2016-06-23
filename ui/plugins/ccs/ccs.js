@@ -504,6 +504,119 @@
                                         return jQuery(s1.concat(s2, s3));
                                     }
                                 },
+                                clusterinstances: {
+                                    title: 'Instances',
+                                    listView: {
+                                        section: 'clusterinstances',
+                                        fields: {
+                                            name: {
+                                                label: 'label.name',
+                                                truncate: true
+                                            },
+                                            instancename: {
+                                                label: 'label.internal.name'
+                                            },
+                                            displayname: {
+                                                label: 'label.display.name',
+                                                truncate: true
+                                            },
+                                            ipaddress: {
+                                                label: 'label.ip.address'
+                                            },
+                                            zonename: {
+                                                label: 'label.zone.name'
+                                            },
+                                            state: {
+                                                label: 'label.state',
+                                                indicator: {
+                                                    'Running': 'on',
+                                                    'Stopped': 'off',
+                                                    'Destroyed': 'off',
+                                                    'Error': 'off'
+                                                }
+                                            }
+                                        },
+                                        dataProvider: function(args) {
+                                            var data = {};
+                                            listViewDataProvider(args, data);
+
+                                            if (args.filterBy != null) { //filter dropdown
+                                                if (args.filterBy.kind != null) {
+                                                    switch (args.filterBy.kind) {
+                                                        case "all":
+                                                        break;
+                                                        case "mine":
+                                                        if (!args.context.projects) {
+                                                            $.extend(data, {
+                                                                domainid: g_domainid,
+                                                                account: g_account
+                                                            });
+                                                        }
+                                                        break;
+                                                        case "running":
+                                                        $.extend(data, {
+                                                            state: 'Running'
+                                                        });
+                                                        break;
+                                                        case "stopped":
+                                                        $.extend(data, {
+                                                            state: 'Stopped'
+                                                        });
+                                                        break;
+                                                        case "destroyed":
+                                                        $.extend(data, {
+                                                            state: 'Destroyed'
+                                                        });
+                                                        break;
+                                                    }
+                                                }
+                                            }
+
+                                            $.ajax({
+                                                url: createURL("listContainerCluster"),
+                                                data: {"id": args.context.containerclusters[0].id},
+                                                success: function(json) {
+                                                    var items = json.listcontainerclusterresponse.containercluster;
+
+                                                    var vmlist = [];
+                                                    $.each(items, function(idx, item) {
+                                                        if ("virtualmachineids" in item) {
+                                                            vmlist = vmlist.concat(item.virtualmachineids);
+                                                        }
+                                                    });
+
+                                                    $.extend(data, {
+                                                        ids: vmlist.join()
+                                                    });
+
+                                                    $.ajax({
+                                                        url: createURL('listVirtualMachines'),
+                                                        data: data,
+                                                        success: function(json) {
+                                                            var items = json.listvirtualmachinesresponse.virtualmachine;
+                                                            if (items) {
+                                                                $.each(items, function(idx, vm) {
+                                                                    if (vm.nic && vm.nic.length > 0 && vm.nic[0].ipaddress) {
+                                                                        items[idx].ipaddress = vm.nic[0].ipaddress;
+                                                                    }
+                                                                });
+                                                            }
+                                                            args.response.success({
+                                                                data: items
+                                                            });
+                                                        },
+                                                        error: function(XMLHttpResponse) {
+                                                            cloudStack.dialog.notice({
+                                                                message: parseXMLHttpResponse(XMLHttpResponse)
+                                                            });
+                                                            args.response.error();
+                                                        }
+                                                    });
+                                                }
+                                            });
+                                       },
+                                    }
+                                },
                                 firewall: {
                                     title: 'label.firewall',
                                     custom: function(args) {
@@ -542,125 +655,6 @@
                         }
                     }
                 },
-                clusterinstances: {
-                    id: 'clusterinstances',
-                    title: 'Instances',
-                    listView: {
-                        section: 'clusterinstances',
-                        fields: {
-                            name: {
-                                label: 'label.name',
-                                truncate: true
-                            },
-                            instancename: {
-                                label: 'label.internal.name'
-                            },
-                            displayname: {
-                                label: 'label.display.name',
-                                truncate: true
-                            },
-                            ipaddress: {
-                                label: 'label.ip.address'
-                            },
-                            zonename: {
-                                label: 'label.zone.name'
-                            },
-                            state: {
-                                label: 'label.state',
-                                indicator: {
-                                    'Running': 'on',
-                                    'Stopped': 'off',
-                                    'Destroyed': 'off',
-                                    'Error': 'off'
-                                }
-                            }
-                        },
-                        dataProvider: function(args) {
-                            var data = {};
-                            listViewDataProvider(args, data);
-
-                            if (args.filterBy != null) { //filter dropdown
-                                if (args.filterBy.kind != null) {
-                                    switch (args.filterBy.kind) {
-                                        case "all":
-                                        break;
-                                        case "mine":
-                                        if (!args.context.projects) {
-                                            $.extend(data, {
-                                                domainid: g_domainid,
-                                                account: g_account
-                                            });
-                                        }
-                                        break;
-                                        case "running":
-                                        $.extend(data, {
-                                            state: 'Running'
-                                        });
-                                        break;
-                                        case "stopped":
-                                        $.extend(data, {
-                                            state: 'Stopped'
-                                        });
-                                        break;
-                                        case "destroyed":
-                                        $.extend(data, {
-                                            state: 'Destroyed'
-                                        });
-                                        break;
-                                    }
-                                }
-                            }
-
-                            var listData = {};
-                            if ("containerclusters" in args.context) {
-                                listData.id = args.context.containerclusters.id;
-                            }
-
-                            $.ajax({
-                                url: createURL("listContainerCluster"),
-                                data: listData,
-                                success: function(json) {
-                                    var items = json.listcontainerclusterresponse.containercluster;
-
-                                    var vmlist = [];
-                                    $.each(items, function(idx, item) {
-                                        if ("virtualmachineids" in item) {
-                                            vmlist = vmlist.concat(item.virtualmachineids);
-                                        }
-                                    });
-
-                                    $.extend(data, {
-                                        ids: vmlist.join()
-                                    });
-
-                                    $.ajax({
-                                        url: createURL('listVirtualMachines'),
-                                        data: data,
-                                        success: function(json) {
-                                            var items = json.listvirtualmachinesresponse.virtualmachine;
-                                            if (items) {
-                                                $.each(items, function(idx, vm) {
-                                                    if (vm.nic && vm.nic.length > 0 && vm.nic[0].ipaddress) {
-                                                        items[idx].ipaddress = vm.nic[0].ipaddress;
-                                                    }
-                                                });
-                                            }
-                                            args.response.success({
-                                                data: items
-                                            });
-                                        },
-                                        error: function(XMLHttpResponse) {
-                                            cloudStack.dialog.notice({
-                                                message: parseXMLHttpResponse(XMLHttpResponse)
-                                            });
-                                            args.response.error();
-                                        }
-                                    });
-                                }
-                            });
-                       },
-                    }
-                }
             }
 
         });
