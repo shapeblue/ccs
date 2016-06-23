@@ -53,7 +53,7 @@ cd $ROOT/../deps && bash -x install.sh && cd $ROOT
 case "$1" in
   deb ) package_deb
       ;;
-  rpm ) pacakge_rpm
+  rpm ) package_rpm
       ;;
   * )   package_deb
         package_rpm
