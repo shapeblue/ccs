@@ -348,7 +348,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     // are provisioned (like volumes, nics, networks etc). It just that VM's are not in running state. So just
     // start the VM's (which can possibly implicitly start the network also).
     @Override
-    public ContainerCluster startContainerCluster(long containerClusterId, boolean onCreate) throws ManagementServerException,
+    public boolean startContainerCluster(long containerClusterId, boolean onCreate) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
 
         if (onCreate) {
@@ -356,12 +356,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             return startContainerClusterOnCreate(containerClusterId);
         } else {
             // Start for container cluster in 'Stopped' state. Resources are already provisioned, just need to be started
-            return null;
+            return startStoppedContainerCluster(containerClusterId);
         }
     }
 
     // perform a cold start (which will provision resources as well)
-    private ContainerCluster startContainerClusterOnCreate(long containerClusterId) throws ManagementServerException,
+    private boolean startContainerClusterOnCreate(long containerClusterId) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
 
         // Starting a contriner cluster has below workflow
@@ -528,7 +528,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                         s_logger.debug("Container cluster name:" + containerCluster.getName() + " is successfully started");
                     }
 
-                    return containerCluster;
+                    return true;
                 }
 
                 try { Thread.sleep(30000);} catch (InterruptedException ex) {}
@@ -545,6 +545,59 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR,
                 "Failed to deploy container cluster: " + containerCluster.getId() + " as unable to setup up in usable state");
+    }
+
+    private boolean startStoppedContainerCluster(long containerClusterId) throws ManagementServerException,
+            ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
+
+        final ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
+        if (containerCluster == null) {
+            throw new ManagementServerException("Failed to find container cluster id: " + containerClusterId);
+        }
+
+        if (containerCluster.getRemoved() != null) {
+            throw new ManagementServerException("Container cluster id:" + containerClusterId + " is already deleted.");
+        }
+
+        if (containerCluster.getState().equals(ContainerCluster.State.Running) ){
+            if (s_logger.isDebugEnabled()) {
+                s_logger.debug("Container cluster id: " + containerClusterId + " is already Running.");
+            }
+            return true;
+        }
+
+        if (containerCluster.getState().equals(ContainerCluster.State.Starting) ){
+            if (s_logger.isDebugEnabled()) {
+                s_logger.debug("Container cluster id: " + containerClusterId + " is getting started.");
+            }
+            return true;
+        }
+
+        if (s_logger.isDebugEnabled()) {
+            s_logger.debug("Starting container cluster: " + containerCluster.getName());
+        }
+
+        stateTransitTo(containerClusterId, ContainerCluster.Event.StartRequested);
+
+        for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
+            final UserVmVO vm = _userVmDao.findById(vmMapVO.getVmId());
+            try {
+                startK8SVM(vm, containerCluster);
+            } catch (ServerApiException ex) {
+                s_logger.warn("Failed to start VM in container cluster id:" + containerClusterId + " due to " + ex);
+            }
+        }
+
+        for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
+            final UserVmVO vm = _userVmDao.findById(vmMapVO.getVmId());
+            if (!vm.getState().equals(VirtualMachine.State.Running)) {
+                stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                throw new ManagementServerException("Failed to start all VMs in container cluster id: " + containerClusterId);
+            }
+        }
+
+        stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
+        return true;
     }
 
     // Open up  firewall port 443, secure port on which kubernetes API server is running. Also create portforwarding
@@ -732,13 +785,27 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
     @Override
     public boolean stopContainerCluster(long containerClusterId) throws ManagementServerException {
-        final ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
 
+        final ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
         if (containerCluster == null) {
             throw new ManagementServerException("Failed to find container cluster id: " + containerClusterId);
         }
 
-        if (containerCluster.getState().equals("Stopped")) {
+        if (containerCluster.getRemoved() != null) {
+            throw new ManagementServerException("Container cluster id:" + containerClusterId + " is already deleted.");
+        }
+
+        if (containerCluster.getState().equals(ContainerCluster.State.Stopped) ){
+            if (s_logger.isDebugEnabled()) {
+                s_logger.debug("Container cluster id: " + containerClusterId + " is already stopped.");
+            }
+            return true;
+        }
+
+        if (containerCluster.getState().equals(ContainerCluster.State.Stopping) ){
+            if (s_logger.isDebugEnabled()) {
+                s_logger.debug("Container cluster id: " + containerClusterId + " is getting stopped.");
+            }
             return true;
         }
 
@@ -979,36 +1046,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.debug("Created master VM: " + hostName + " in the container cluster: " + containerCluster.getName());
         }
 
-        try {
-            StartVMCmd startVm = new StartVMCmd();
-            startVm = ComponentContext.inject(startVm);
-            Field f = startVm.getClass().getDeclaredField("id");
-            f.setAccessible(true);
-            f.set(startVm, masterVm.getId());
-            _userVmService.startVirtualMachine(startVm);
-            if (s_logger.isDebugEnabled()) {
-                s_logger.debug("Started master VM: " + hostName + " in the container cluster: " + containerCluster.getName());
-            }
-        } catch (ConcurrentOperationException ex) {
-            s_logger.warn("Failed to launch master VM Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, ex.getMessage());
-        } catch (ResourceUnavailableException ex) {
-            s_logger.warn("Failed to launch master VM Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.RESOURCE_UNAVAILABLE_ERROR, ex.getMessage());
-        } catch (InsufficientCapacityException ex) {
-            s_logger.warn("Failed to launch master VM Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.INSUFFICIENT_CAPACITY_ERROR, ex.getMessage());
-        } catch (Exception ex) {
-            s_logger.warn("Failed to launch master VM Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, ex.getMessage());
-        }
+        startK8SVM(masterVm, containerCluster);
 
         masterVm = _vmDao.findById(masterVm.getId());
-        if (!masterVm.getState().equals(VirtualMachine.State.Running)) {
-            s_logger.warn("Failed to start master VM instance.");
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to start master VM instance in container cluster " + containerCluster.getName());
-        }
-
         return masterVm;
     }
 
@@ -1055,38 +1095,48 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.debug("Created cluster node VM: " + hostName + " in the container cluster: " + containerCluster.getName());
         }
 
+        startK8SVM(nodeVm, containerCluster);
+
+        nodeVm = _vmDao.findById(nodeVm.getId());
+        return nodeVm;
+    }
+
+    private void startK8SVM(final UserVm vm, final ContainerClusterVO containerCluster) throws ServerApiException {
+
         try {
             StartVMCmd startVm = new StartVMCmd();
             startVm = ComponentContext.inject(startVm);
             Field f = startVm.getClass().getDeclaredField("id");
             f.setAccessible(true);
-            f.set(startVm, nodeVm.getId());
+            f.set(startVm, vm.getId());
             _userVmService.startVirtualMachine(startVm);
+            if (s_logger.isDebugEnabled()) {
+                s_logger.debug("Started VM in the container cluster: " + containerCluster.getName());
+            }
         } catch (ConcurrentOperationException ex) {
-            s_logger.warn("Failed to launch node VM due to Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, ex.getMessage());
+            s_logger.warn("Failed to start VM in the container cluster: " +
+                    containerCluster.getName() + " due to Exception: ", ex);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to start VM in the container cluster: ");
         } catch (ResourceUnavailableException ex) {
-            s_logger.warn("Failed to launch node VM due to Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.RESOURCE_UNAVAILABLE_ERROR, ex.getMessage());
+            s_logger.warn("Failed to start VM in the container cluster: " +
+                    containerCluster.getName() + " due to Exception: ", ex);
+            throw new ServerApiException(ApiErrorCode.RESOURCE_UNAVAILABLE_ERROR, "Failed to start VM in the container cluster: ");
         } catch (InsufficientCapacityException ex) {
-            s_logger.warn("Failed to launch node VM due to Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.INSUFFICIENT_CAPACITY_ERROR, ex.getMessage());
-        } catch (Exception ex ) {
-            s_logger.warn("Failed to launch node VM due to Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, ex.getMessage());
+            s_logger.warn("Failed to start VM in the container cluster: " +
+                    containerCluster.getName() + " due to Exception: ", ex);
+            throw new ServerApiException(ApiErrorCode.INSUFFICIENT_CAPACITY_ERROR, "Failed to start VM in the container cluster: ");
+        } catch (Exception ex) {
+            s_logger.warn("Failed to start VM in the container cluster: " +
+                    containerCluster.getName() + " due to Exception: ", ex);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to start VM in the container cluster: ");
         }
 
-        UserVmVO tmpVm = _vmDao.findById(nodeVm.getId());
-        if (!tmpVm.getState().equals(VirtualMachine.State.Running)) {
-            s_logger.warn("Failed to start node VM instance.");
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to start node VM instance.");
+        UserVm startVm = _vmDao.findById(vm.getId());
+        if (!startVm.getState().equals(VirtualMachine.State.Running)) {
+            s_logger.warn("Failed to start VM instance.");
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR,
+                    "Failed to start VM instance in container cluster " + containerCluster.getName());
         }
-
-        if (s_logger.isDebugEnabled()) {
-            s_logger.debug("Started cluster node VM: " + hostName + " in the container cluster: " + containerCluster.getName());
-        }
-
-        return nodeVm;
     }
 
     private void stopK8SVM(final ContainerClusterVmMapVO vmMapVO) throws ServerApiException {

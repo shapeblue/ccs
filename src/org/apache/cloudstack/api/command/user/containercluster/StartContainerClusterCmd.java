@@ -107,7 +107,7 @@ public class StartContainerClusterCmd extends BaseAsyncCmd {
     public void execute() throws ResourceUnavailableException, InsufficientCapacityException, ServerApiException, ConcurrentOperationException, ResourceAllocationException, NetworkRuleConflictException {
         final ContainerCluster containerCluster = validateRequest();
         try {
-            containerClusterService.startContainerCluster(getId(), false);
+            containerClusterService.startContainerCluster(getId().longValue(), false);
             final ContainerClusterResponse response = containerClusterService.createContainerClusterResponse(getId());
             response.setResponseName(getCommandName());
             setResponseObject(response);
