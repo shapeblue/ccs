@@ -54,7 +54,9 @@ import com.cloud.org.Grouping;
 import com.cloud.service.dao.ServiceOfferingDao;
 import com.cloud.service.ServiceOfferingVO;
 import com.cloud.storage.VMTemplateVO;
+import com.cloud.storage.VMTemplateZoneVO;
 import com.cloud.storage.dao.VMTemplateDao;
+import com.cloud.storage.dao.VMTemplateZoneDao;
 import com.cloud.user.AccountManager;
 import com.cloud.user.SSHKeyPairVO;
 import com.cloud.user.User;
@@ -109,9 +111,11 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.io.PrintWriter;
 import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Field;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -131,54 +135,56 @@ import org.apache.commons.codec.binary.Base64;
 public class ContainerClusterManagerImpl extends ManagerBase implements ContainerClusterManager, ContainerClusterService {
 
     private static final Logger s_logger = Logger.getLogger(ContainerClusterManagerImpl.class);
+
     protected StateMachine2<ContainerCluster.State, ContainerCluster.Event, ContainerCluster> _stateMachine = ContainerCluster.State.getStateMachine();
+
     ScheduledExecutorService _gcExecutor;
     ScheduledExecutorService _stateScanner;
 
     @Inject
-    ContainerClusterDao _containerClusterDao;
+    private ContainerClusterDao _containerClusterDao;
     @Inject
-    ContainerClusterVmMapDao _clusterVmMapDao;
+    private ContainerClusterVmMapDao _clusterVmMapDao;
     @Inject
-    ContainerClusterDetailsDao _containerClusterDetailsDao;
+    private ContainerClusterDetailsDao _containerClusterDetailsDao;
     @Inject
-    protected SSHKeyPairDao _sshKeyPairDao;
+    private SSHKeyPairDao _sshKeyPairDao;
     @Inject
-    public UserVmService _userVmService;
+    private UserVmService _userVmService;
     @Inject
-    protected DataCenterDao _dcDao;
+    private DataCenterDao _dcDao;
     @Inject
-    protected ServiceOfferingDao _offeringDao;
+    private ServiceOfferingDao _offeringDao;
     @Inject
-    protected VMTemplateDao _templateDao;
+    private VMTemplateDao _templateDao;
     @Inject
-    protected AccountDao _accountDao;
+    private AccountDao _accountDao;
     @Inject
     private UserVmDao _vmDao;
     @Inject
-    ConfigurationDao _globalConfigDao;
+    private ConfigurationDao _globalConfigDao;
     @Inject
-    NetworkService _networkService;
+    private NetworkService _networkService;
     @Inject
-    NetworkOfferingDao _networkOfferingDao;
+    private NetworkOfferingDao _networkOfferingDao;
     @Inject
-    protected NetworkModel _networkModel;
+    private NetworkModel _networkModel;
     @Inject
-    PhysicalNetworkDao _physicalNetworkDao;
+    private PhysicalNetworkDao _physicalNetworkDao;
     @Inject
-    protected NetworkOrchestrationService _networkMgr;
+    private NetworkOrchestrationService _networkMgr;
     @Inject
-    protected NetworkDao _networkDao;
+    private NetworkDao _networkDao;
     @Inject
     private IPAddressDao _publicIpAddressDao;
     @Inject
-    PortForwardingRulesDao _portForwardingDao;
+    private PortForwardingRulesDao _portForwardingDao;
     @Inject
     private FirewallService _firewallService;
     @Inject
-    public RulesService _rulesService;
+    private RulesService _rulesService;
     @Inject
-    public NetworkOfferingServiceMapDao _ntwkOfferingServiceMapDao;
+    private NetworkOfferingServiceMapDao _ntwkOfferingServiceMapDao;
     @Inject
     private AccountManager _accountMgr;
     @Inject
@@ -188,7 +194,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     @Inject
     private UserVmDao _userVmDao;
     @Inject
-    protected VMInstanceDao _vmInstanceDao;
+    private VMInstanceDao _vmInstanceDao;
+    @Inject
+    private VMTemplateZoneDao _templateZoneDao;
 
     @Override
     public ContainerCluster createContainerCluster(final String name,
@@ -202,31 +210,31 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             throws InsufficientCapacityException, ResourceAllocationException, ManagementServerException {
 
         if (name == null || name.isEmpty()) {
-            throw new InvalidParameterValueException("Invalid name for the container cluster name: " + name);
+            throw new InvalidParameterValueException("Invalid name for the container cluster name:" + name);
         }
 
         if (clusterSize < 1) {
-            throw new InvalidParameterValueException("invalid cluster size " + clusterSize);
+            throw new InvalidParameterValueException("invalid cluster size:" + clusterSize);
         }
 
         DataCenter zone =  _dcDao.findById(zoneId);
         if (zone == null) {
-            throw new InvalidParameterValueException("Unable to find zone by id=" + zoneId);
+            throw new InvalidParameterValueException("Unable to find zone by id:" + zoneId);
         }
 
         if (Grouping.AllocationState.Disabled == zone.getAllocationState()) {
-            throw new PermissionDeniedException("Cannot perform this operation, Zone is currently disabled: " + zone.getId());
+            throw new PermissionDeniedException("Cannot perform this operation, Zone:" + zone.getId() + " is currently disabled.");
         }
 
         ServiceOffering serviceOffering = _srvOfferingDao.findById(serviceOfferingId);
         if (serviceOffering == null) {
-            throw new InvalidParameterValueException("No service offering with id  " + serviceOfferingId);
+            throw new InvalidParameterValueException("No service offering with id:" + serviceOfferingId);
         }
 
         if(sshKeyPair != null && !sshKeyPair.isEmpty()) {
             SSHKeyPairVO sshkp = _sshKeyPairDao.findByName(owner.getAccountId(), owner.getDomainId(), sshKeyPair);
             if (sshkp == null) {
-                throw new InvalidParameterValueException("Given SSH key pair with name '" + sshKeyPair + "' was not found for the account " + owner.getAccountName());
+                throw new InvalidParameterValueException("Given SSH key pair with name:" + sshKeyPair + " was not found for the account " + owner.getAccountName());
             }
         }
 
@@ -234,12 +242,20 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         if (networkId != null) {
             network = _networkService.getNetwork(networkId);
             if (network == null) {
-                throw new InvalidParameterValueException("Unable to find network by ID " + networkId);
+                throw new InvalidParameterValueException("Unable to find network by id:" + networkId);
             }
+            _networkModel.checkNetworkPermissions(owner, network);
         }
 
         if (!isContainerServiceConfigured(zone)) {
-            throw new ManagementServerException("Container service has not been configured properly to provision clusters.");
+            throw new ManagementServerException("Container service has not been configured properly to provision container clusters.");
+        }
+
+        VMTemplateVO template = _templateDao.findByTemplateName(_globalConfigDao.getValue(CcsConfig.ContainerClusterTemplateName.key()));
+        List<VMTemplateZoneVO> listZoneTemplate = _templateZoneDao.listByZoneTemplate(zone.getId(), template.getId());
+        if (listZoneTemplate == null || listZoneTemplate.isEmpty()) {
+            s_logger.warn("The template:" + template.getId() + " is not available for use in zone:" + zoneId + " to provision container cluster name:" + name);
+            throw new ManagementServerException("Container service has not been configured properly to provision container clusters.");
         }
 
         // user has not specified network in which cluster VM's to be provisioned, so create a network for container cluster
@@ -266,7 +282,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         }
 
         final Network defaultNetwork = network;
-        final VMTemplateVO template = _templateDao.findByTemplateName(_globalConfigDao.getValue(CcsConfig.ContainerClusterTemplateName.key()));
+        final VMTemplateVO finalTemplate = template;
         final long cores = serviceOffering.getCpu() * clusterSize;
         final long memory = serviceOffering.getRamSize() * clusterSize;
 
@@ -274,7 +290,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             @Override
             public ContainerClusterVO doInTransaction(TransactionStatus status) {
                 ContainerClusterVO newCluster = new ContainerClusterVO(name, displayName, zoneId,
-                        serviceOfferingId, template.getId(), defaultNetwork.getId(), owner.getDomainId(),
+                        serviceOfferingId, finalTemplate.getId(), defaultNetwork.getId(), owner.getDomainId(),
                         owner.getAccountId(), clusterSize, ContainerCluster.State.Created, sshKeyPair, cores, memory, "", "");
                 _containerClusterDao.persist(newCluster);
                 return newCluster;
@@ -282,26 +298,27 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         });
 
         if (s_logger.isDebugEnabled()) {
-            s_logger.debug("A container cluster with id " + cluster.getId() + " has been created.");
+            s_logger.debug("A container cluster name:" + name + " id:" + cluster.getId() + " has been created.");
         }
 
         return cluster;
     }
 
 
-    // Start operation can be performed at diffrent stages of container cluster. First when a freshly created cluster
+    // Start operation can be performed at two diffrent life stages of container cluster. First when a freshly created cluster
     // in which case there are no resources provisisioned for the container cluster. So during start all the resources
-    // are provisioned from scratch. Secondar kind of start (happening from Stopped->Start), in which all resources
+    // are provisioned from scratch. Second kind of start, happens on  Stopped container cluster, in which all resources
     // are provisioned (like volumes, nics, networks etc). It just that VM's are not in running state. So just
-    // start the VM's which can possibley result in start of the network also.
+    // start the VM's (which can possibly implicitly start the network also).
     @Override
     public ContainerCluster startContainerCluster(long containerClusterId, boolean onCreate) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
 
         if (onCreate) {
+            // Start for container cluster in 'Created' state
             return startContainerClusterOnCreate(containerClusterId);
         } else {
-            // resources are already provisioned, just need to be started
+            // Start for container cluster in 'Stopped' state. Resources are already provisioned, just need to be started
             return null;
         }
     }
@@ -309,6 +326,17 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     // perform a cold start (which will provision resources as well)
     private ContainerCluster startContainerClusterOnCreate(long containerClusterId) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
+
+        // Starting a contriner cluster has below workflow
+        //   - start the newtwork
+        //   - provision the master /node VM
+        //   - priovision node VM's (as many as cluster size)
+        //   - update the booke keeping data of the VM's provisioned for the cluster
+        //   - setup networking (add Firewall and PF rules)
+        //   - wait till kubernetes API server on master VM to come up
+        //   - wait till addon services (dashboard etc) to come up
+        //   - update API and dashboard URL endpoints in container cluster details
+
         ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
 
         if (s_logger.isDebugEnabled()) {
@@ -326,32 +354,47 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         try {
             _networkMgr.startNetwork(containerCluster.getNetworkId(), dest, context);
             if (s_logger.isDebugEnabled()) {
-                s_logger.debug("Network " + containerCluster.getNetworkId() + " is started for the  container cluster: " + containerCluster.getName());
+                s_logger.debug("Network:" + containerCluster.getNetworkId() + " is started for the  container cluster: " + containerCluster.getName());
             }
-        }catch (RuntimeException e) {
-            s_logger.warn("Failed to start the network while creating container cluster due to: " + e);
-            throw new ManagementServerException("Failed to start the network while creating container cluster " + containerCluster.getName());
+        } catch (RuntimeException e) {
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+            s_logger.warn("Starting the network failed as part of starting container cluster " + containerCluster.getName() + " due to " + e);
+            throw new ManagementServerException("Failed to start the network while creating container cluster " + containerCluster.getName(), e);
         } catch(Exception e) {
             stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
             s_logger.warn("Starting the network failed as part of starting container cluster " + containerCluster.getName() + " due to " + e);
-            throw new ManagementServerException("Failed to start the network while creating container cluster " + containerCluster.getName());
+            throw new ManagementServerException("Failed to start the network while creating container cluster "
+                    + containerCluster.getName(), e);
         }
+
+        IPAddressVO publicIp = null;
+        List<IPAddressVO> ips = _publicIpAddressDao.listByAssociatedNetwork(containerCluster.getNetworkId(), true);
+        if (ips == null || ips.isEmpty()) {
+            s_logger.warn("Network:" + containerCluster.getNetworkId() + " for the container cluster name:" + containerCluster.getName() + " does not have " +
+                    "public IP's assocated with it. So aborting container cluster strat.");
+            throw new ManagementServerException("Failed to start the network while creating container cluster name:" + containerCluster.getName());
+        }
+        publicIp = ips.get(0);
 
         UserVm k8sMasterVM = null;
         try {
             k8sMasterVM = createK8SMaster(containerCluster);
             if (s_logger.isDebugEnabled()) {
-                s_logger.debug("Provisioned the master VM's in to the container cluster: " + containerCluster.getName());
+                s_logger.debug("Provisioned the master VM's in to the container cluster name:" + containerCluster.getName());
             }
+        } catch (RuntimeException e) {
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+            s_logger.warn("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName() + " due to " + e);
+            throw new ManagementServerException("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName(), e);
         } catch (Exception e) {
             stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
             s_logger.warn("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName() + " due to " + e);
-            throw new ManagementServerException("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName());
+            throw new ManagementServerException("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName(), e);
         }
 
         final long clusterId = containerCluster.getId();
         final long masterVmId = k8sMasterVM.getId();
-        ContainerClusterVmMapVO clusterMasterVmMap = Transaction.execute(new TransactionCallback<ContainerClusterVmMapVO>() {
+        Transaction.execute(new TransactionCallback<ContainerClusterVmMapVO>() {
             @Override
             public ContainerClusterVmMapVO doInTransaction(TransactionStatus status) {
                 ContainerClusterVmMapVO newClusterVmMap = new ContainerClusterVmMapVO(clusterId, masterVmId);
@@ -362,13 +405,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         String masterIP = k8sMasterVM.getPrivateIpAddress();
 
-        IPAddressVO publicIp = null;
-        List<IPAddressVO> ips = _publicIpAddressDao.listByAssociatedNetwork(containerCluster.getNetworkId(), true);
-        if (ips != null && !ips.isEmpty()) {
-            publicIp = ips.get(0);
-            containerCluster.setEndpoint("https://" + publicIp.getAddress() + "/");
-        }
-
         long anyNodeVmId = 0;
         UserVm k8anyNodeVM = null;
         for (int i=1; i <= containerCluster.getNodeCount(); i++) {
@@ -378,10 +414,14 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 if (s_logger.isDebugEnabled()) {
                     s_logger.debug("Provisioned a node VM in to the container cluster: " + containerCluster.getName());
                 }
+            } catch (RuntimeException e) {
+                stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+                s_logger.warn("Provisioning the node VM failed in the container cluster " + containerCluster.getName() + " due to " + e);
+                throw new ManagementServerException("Provisioning the node VM failed in the container cluster " + containerCluster.getName(), e);
             } catch (Exception e) {
                 stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
                 s_logger.warn("Provisioning the node VM failed in the container cluster " + containerCluster.getName() + " due to " + e);
-                throw new ManagementServerException("Provisioning the node VM failed in the container cluster " + containerCluster.getName());
+                throw new ManagementServerException("Provisioning the node VM failed in the container cluster " + containerCluster.getName(), e);
             }
 
             if (anyNodeVmId == 0) {
@@ -391,7 +431,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
             final long nodeVmId = vm.getId();
             ContainerClusterVmMapVO clusterNodeVmMap = Transaction.execute(new TransactionCallback<ContainerClusterVmMapVO>() {
-
                 @Override
                 public ContainerClusterVmMapVO doInTransaction(TransactionStatus status) {
                     ContainerClusterVmMapVO newClusterVmMap = new ContainerClusterVmMapVO(clusterId, nodeVmId);
@@ -401,14 +440,83 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             });
         }
 
-        _containerClusterDao.update(containerCluster.getId(), containerCluster);
         if (s_logger.isDebugEnabled()) {
             s_logger.debug("Container cluster : " + containerCluster.getName() + " VM's are successfully provisioned.");
         }
 
+        setupContainerClusterNetworkRules(publicIp, account, containerClusterId, masterVmId);
+
         int retryCounter = 0;
         int maxRetries = 10;
         boolean k8sApiServerSetup = false;
+
+        while (retryCounter < maxRetries) {
+            try (Socket socket = new Socket()) {
+                socket.connect(new InetSocketAddress(publicIp.getAddress().addr(), 443), 10000);
+                k8sApiServerSetup = true;
+                containerCluster = _containerClusterDao.findById(containerClusterId);
+                containerCluster.setEndpoint("https://" + publicIp.getAddress() + "/");
+                _containerClusterDao.update(containerCluster.getId(), containerCluster);
+                break;
+            } catch (IOException e) {
+                if (s_logger.isDebugEnabled()) {
+                    s_logger.debug("Waiting for container cluster: " + containerCluster.getName() + " API endpoint to be available. retry: " + retryCounter + "/" + maxRetries);
+                }
+                try { Thread.sleep(50000); } catch (InterruptedException ex) {}
+                retryCounter++;
+            }
+        }
+
+        if (k8sApiServerSetup) {
+
+            retryCounter = 0;
+            maxRetries = 10;
+            // Dashbaord service is a docker image downloaded at run time.
+            // So wait for some time and check if dashbaord service is up running.
+            while (retryCounter < maxRetries) {
+
+                if (s_logger.isDebugEnabled()) {
+                    s_logger.debug("Waiting for dashboard service for the container cluster: " + containerCluster.getName()
+                            + " to come up. Attempt: " + retryCounter + " of max retries " + maxRetries);
+                }
+
+                if (isAddOnServiceRunning(containerCluster.getId(), "kubernetes-dashboard")) {
+
+                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
+
+                    containerCluster = _containerClusterDao.findById(containerClusterId);
+                    containerCluster.setConsoleEndpoint("https://" + publicIp.getAddress() + "/api/v1/proxy/namespaces/kube-system/services/kubernetes-dashboard");
+                    _containerClusterDao.update(containerCluster.getId(), containerCluster);
+
+                    if (s_logger.isDebugEnabled()) {
+                        s_logger.debug("Container cluster name:" + containerCluster.getName() + " is successfully started");
+                    }
+
+                    return containerCluster;
+                }
+
+                try { Thread.sleep(30000);} catch (InterruptedException ex) {}
+                retryCounter++;
+            }
+            s_logger.warn("Failed to setup container cluster " + containerCluster.getName() + " in usable state as" +
+                    " unable to bring dashboard add on service up");
+        } else {
+            s_logger.warn("Failed to setup container cluster " + containerCluster.getName() + " in usable state as" +
+                    " unable to bring the API server up");
+        }
+
+        stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+
+        throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR,
+                "Failed to deploy container cluster: " + containerCluster.getId() + " as unable to setup up in usable state");
+    }
+
+    // Open up  firewall port 443, secure port on which kubernetes API server is running. Also create portforwarding
+    // rule to forward public IP traffic to master VM private IP
+    private void setupContainerClusterNetworkRules(IPAddressVO publicIp, Account account, long containerClusterId,
+                                                   long masterVmId) throws  ManagementServerException {
+
+        ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
 
         List<String> sourceCidrList = new ArrayList<String>();
         sourceCidrList.add("0.0.0.0/0");
@@ -452,7 +560,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     "cluster: " + containerCluster.getName());
         }
 
-        Nic masterVmNic = _networkModel.getNicInNetwork(k8sMasterVM.getId(), containerCluster.getNetworkId());
+        Nic masterVmNic = _networkModel.getNicInNetwork(masterVmId, containerCluster.getNetworkId());
         final Ip masterIpFinal = new Ip(masterVmNic.getIp4Address());
         final long publicIpId = publicIp.getId();
         final long networkId = containerCluster.getNetworkId();
@@ -487,62 +595,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
             throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName() + " due to " + e);
         }
-
-        while (retryCounter < maxRetries) {
-            try (Socket socket = new Socket()) {
-                socket.connect(new InetSocketAddress(publicIp.getAddress().addr(), 443), 10000);
-                k8sApiServerSetup = true;
-                break;
-            } catch (IOException e) {
-                if (s_logger.isDebugEnabled()) {
-                    s_logger.debug("Waiting for container cluster: " + containerCluster.getName() + " API endpoint to be available. retry: " + retryCounter + "/" + maxRetries);
-                }
-                try { Thread.sleep(50000); } catch (Exception ex) {}
-                retryCounter++;
-            }
-        }
-
-        if (k8sApiServerSetup) {
-            retryCounter = 0;
-            maxRetries = 10;
-            // Dashbaord service is a docker image downloaded at run time.
-            // So wait for some time and check if dashbaord service is up running.
-            while (retryCounter < maxRetries) {
-
-                if (s_logger.isDebugEnabled()) {
-                    s_logger.debug("Waiting for dashboard service for the container cluster: " + containerCluster.getName()
-                            + " to come up. Attempt: " + retryCounter + " of max retries " + maxRetries);
-                }
-
-                if (isAddOnServiceRunning(containerCluster.getId(), "kubernetes-dashboard")) {
-
-                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
-
-                    _containerClusterDao.update(containerCluster.getId(), containerCluster);
-                    containerCluster.setConsoleEndpoint("https://" + publicIp.getAddress() + "/api/v1/proxy/namespaces/kube-system/services/kubernetes-dashboard");
-                    _containerClusterDao.update(containerCluster.getId(), containerCluster);
-
-                    if (s_logger.isDebugEnabled()) {
-                        s_logger.debug("Container cluster name:" + containerCluster.getName() + " is successfully started");
-                    }
-
-                    return containerCluster;
-                }
-
-                try { Thread.sleep(30000);} catch (Exception ex) {}
-                retryCounter++;
-            }
-            s_logger.warn("Failed to setup container cluster " + containerCluster.getName() + " in usable state as" +
-                    " unable to bring dashboard add on service up");
-        } else {
-            s_logger.warn("Failed to setup container cluster " + containerCluster.getName() + " in usable state as" +
-                    " unable to bring the API server up");
-        }
-
-        stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
-
-        throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR,
-                "Failed to deploy container cluster: " + containerCluster.getId() + " as unable to setup up in usable state");
     }
 
     private boolean isAddOnServiceRunning(Long clusterId, String svcName) {
@@ -552,9 +604,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         //FIXME: whole logic needs revamp. Assumption that management server has public network access is not practical
         IPAddressVO publicIp = null;
         List<IPAddressVO> ips = _publicIpAddressDao.listByAssociatedNetwork(containerCluster.getNetworkId(), true);
-        if (ips != null && !ips.isEmpty()) {
-            publicIp = ips.get(0);
-        }
+        publicIp = ips.get(0);
+
         Runtime r = Runtime.getRuntime();
         int nodePort = 0;
         try {
@@ -564,7 +615,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     + " get pods --insecure-skip-tls-verify=true --namespace=kube-system";
             Process p = r.exec(execStr);
             p.waitFor();
-            BufferedReader b = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            BufferedReader b = new BufferedReader(new InputStreamReader(p.getInputStream(), "UTF8"));
             String line = "";
             while ((line = b.readLine()) != null) {
                 if (s_logger.isDebugEnabled()) {
@@ -575,6 +626,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                         s_logger.debug("Service :" + svcName + " for the container cluster "
                                 + containerCluster.getName() + " is running");
                     }
+                    b.close();
                     return true;
                 }
             }
@@ -599,6 +651,13 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         Account caller = ctx.getCallingAccount();
 
         _accountMgr.checkAccess(caller, SecurityChecker.AccessType.OperateEntry, false, cluster);
+
+        return cleanupContainerClusterResources(containerClusterId);
+    }
+
+    private boolean cleanupContainerClusterResources(Long containerClusterId) {
+
+        ContainerClusterVO cluster = _containerClusterDao.findById(containerClusterId);
 
         if (!(cluster.getState().equals(ContainerCluster.State.Running)
                 || cluster.getState().equals(ContainerCluster.State.Stopped)
@@ -641,8 +700,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
         }
 
-        boolean failedNetworkDestroy = false;
-
         // if there are VM's that were not expunged, we can not delete the network
         if(!failedVmDestroy) {
             NetworkVO network = null;
@@ -658,23 +715,20 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     }
                 }
             } catch (Exception e) {
-                s_logger.error("Failed to destroy network: " + cluster.getNetworkId() +
-                        " as part of cluster: " + cluster.getName() + "  destroy due to " + e);
-                failedNetworkDestroy = true;
+                if (s_logger.isDebugEnabled()) {
+                    s_logger.debug("Failed to destroy network: " + cluster.getNetworkId() +
+                            " as part of cluster: " + cluster.getName() + "  destroy due to " + e);
+                }
+                stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                cluster = _containerClusterDao.findById(containerClusterId);
+                cluster.setCheckForGc(true);
+                _containerClusterDao.update(cluster.getId(), cluster);
+                return false;
             }
         } else {
             if (s_logger.isDebugEnabled()) {
                 s_logger.debug("Not deleting the network as there are VM's that are not expunged in container cluster " + cluster.getName());
             }
-            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
-            cluster = _containerClusterDao.findById(containerClusterId);
-            cluster.setCheckForGc(true);
-            _containerClusterDao.update(cluster.getId(), cluster);
-            return false;
-        }
-
-        if (failedNetworkDestroy) {
-            s_logger.warn("Container cluster: " + cluster.getName() + " failed to get destroyed as network in the cluster is not expunged.");
             stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             cluster = _containerClusterDao.findById(containerClusterId);
             cluster.setCheckForGc(true);
@@ -689,9 +743,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         _containerClusterDao.update(cluster.getId(), cluster);
 
         _containerClusterDao.remove(cluster.getId());
+
         if (s_logger.isDebugEnabled()) {
             s_logger.debug("Container cluster name:" + cluster.getName() + " is successfully deleted");
         }
+
         return true;
     }
 
@@ -722,8 +778,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             k8sMasterConfig = readFile(masterCloudConfig);
             SecureRandom random = new SecureRandom();
             final String randomPassword = new BigInteger(130, random).toString(32);
-            final String password = new String("{{ k8s_master.password }}");
-            final String user = new String("{{ k8s_master.user }}");
+            final String password = "{{ k8s_master.password }}";
+            final String user = "{{ k8s_master.user }}";
             k8sMasterConfig = k8sMasterConfig.replace(password, randomPassword);
             k8sMasterConfig = k8sMasterConfig.replace(user, "admin");
 
@@ -741,7 +797,13 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.error("Failed to read kubernetes master configuration file");
         }
 
-        String base64UserData = Base64.encodeBase64String(k8sMasterConfig.getBytes());
+        String base64UserData;
+        try {
+            base64UserData = Base64.encodeBase64String(k8sMasterConfig.getBytes("UTF-8"));
+        } catch (UnsupportedEncodingException ue) {
+            s_logger.warn("Failed to encode master VM user data due to: ", ue);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to encode master VM user data due to: " + ue.getMessage());
+        }
 
 
         masterVm = _userVmService.createAdvancedVirtualMachine(zone, serviceOffering, template, networkIds, owner,
@@ -811,15 +873,20 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         try {
             String nodeCloudConfig = _globalConfigDao.getValue(CcsConfig.ContainerClusterNodeCloudConfig.key());
             k8sNodeConfig = readFile(nodeCloudConfig).toString();
-            String masterIPString = new String("{{ k8s_master.default_ip }}");
+            String masterIPString = "{{ k8s_master.default_ip }}";
             k8sNodeConfig = k8sNodeConfig.replace(masterIPString, masterIp);
         } catch (Exception e) {
             s_logger.warn("Failed to read node configuration file ");
             throw new ManagementServerException("Failed to read cluster node configuration file.");
         }
 
-        String base64UserData = Base64.encodeBase64String(k8sNodeConfig.getBytes());
-
+        String base64UserData;
+        try {
+            base64UserData = Base64.encodeBase64String(k8sNodeConfig.getBytes("UTF-8"));
+        } catch (UnsupportedEncodingException ue) {
+            s_logger.warn("Failed to encode node VM user data due to: ", ue);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to encode master VM user data due to: " + ue.getMessage());
+        }
         nodeVm = _userVmService.createAdvancedVirtualMachine(zone, serviceOffering, template, networkIds, owner,
                 hostName, containerCluster.getDescription(), null, null, null,
                 null, BaseCmd.HTTPMethod.POST, base64UserData, containerCluster.getKeyPair(),
@@ -972,7 +1039,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     static String readFile(String path) throws IOException
     {
         byte[] encoded = Files.readAllBytes(Paths.get(path));
-        return new String(encoded);
+        return new String(encoded, StandardCharsets.UTF_8);
     }
 
     protected boolean stateTransitTo(long containerClusterId, ContainerCluster.Event e) {
@@ -997,14 +1064,15 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         String templateName = _globalConfigDao.getValue(CcsConfig.ContainerClusterTemplateName.key());
         if (templateName == null || templateName.isEmpty()) {
-            s_logger.warn("global setting " + CcsConfig.ContainerClusterTemplateName.key() + " is empty." +
-                    "Admin has not specified the template name, that will be used for provisioning cluster VM");
+            s_logger.warn("Global setting " + CcsConfig.ContainerClusterTemplateName.key() + " is empty." +
+                    "Template name need to be specified, for container service to function.");
             return false;
         }
 
         final VMTemplateVO template = _templateDao.findByTemplateName(templateName);
         if (template == null) {
            s_logger.warn("Unable to find the template:" + templateName  + " to be used for provisioning cluster");
+            return false;
         }
 
         String masterCloudConfig = _globalConfigDao.getValue(CcsConfig.ContainerClusterMasterCloudConfig.key());
@@ -1097,9 +1165,14 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                         s_logger.debug("Running container cluster garbage collector on container cluster name:" + containerCluster.getName());
                     }
                     try {
-                        if (deleteContainerCluster(containerCluster.getId())) {
+                        if (cleanupContainerClusterResources(containerCluster.getId())) {
                             if (s_logger.isDebugEnabled()) {
                                 s_logger.debug("Container cluster: " + containerCluster.getName() + " is successfully garbage collected");
+                            }
+                        } else {
+                            if (s_logger.isDebugEnabled()) {
+                                s_logger.debug("Container cluster: " + containerCluster.getName() + " failed to get" +
+                                        " garbage collected. Will be attempted to garbage collected in next run");
                             }
                         }
                     } catch (Exception e) {
@@ -1143,6 +1216,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         public void reallyRun() {
             try {
+
                 // run through container clusters in 'Running' state and ensure all the VM's are Running in the cluster
                 List<ContainerClusterVO> runningContainerClusters = _containerClusterDao.findContainerClustersInState(ContainerCluster.State.Running);
                 for (ContainerCluster containerCluster : runningContainerClusters ) {

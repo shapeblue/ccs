@@ -286,7 +286,9 @@ public class ContainerClusterVO implements ContainerCluster {
 
 
     public Date getRemoved() {
-        return removed;
+        if (removed == null)
+            return null;
+        return new Date(removed.getTime());
     }
 
     public boolean ischeckForGc() {
