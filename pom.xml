@@ -248,6 +248,11 @@
       <version>${org.springframework.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-test</artifactId>
+      <version>${org.springframework.version}</version>
+    </dependency>
+    <dependency>
       <groupId>commons-codec</groupId>
       <artifactId>commons-codec</artifactId>
       <version>${cs.codec.version}</version>
@@ -267,7 +272,7 @@
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-all</artifactId>
-      <version>1.9.5</version>
+      <version>${cs.mockito.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -280,12 +285,6 @@
 	  <artifactId>powermock-api-mockito</artifactId>
 	  <version>${cs.powermock.version}</version>
 	  <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework</groupId>
-      <artifactId>spring-test</artifactId>
-      <version>${org.springframework.version}</version>
-      <scope>test</scope>
     </dependency>
   </dependencies>
 
