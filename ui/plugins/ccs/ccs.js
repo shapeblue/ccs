@@ -3,7 +3,7 @@
     cloudStack.plugins.ccs = function(plugin) {
         plugin.ui.addSection({
             id: 'ccs',
-            title: 'CloudStack Container Service',
+            title: 'Container Service',
             showOnNavigation: true,
             preFilter: function(args) {
                 return isAdmin();
@@ -279,9 +279,11 @@
                         },
 
                         dataProvider: function(args) {
-                            var data = {};
+                            var data = {
+                                    page: args.page,
+                                    pagesize: pageSize
+                                };
                             listViewDataProvider(args, data);
-
                             if (args.filterBy != null) { //filter dropdown
                                 if (args.filterBy.kind != null) {
                                     switch (args.filterBy.kind) {
@@ -304,6 +306,8 @@
                             $.ajax({
                                 url: createURL("listContainerCluster"),
                                 data: data,
+                                dataType: "json",
+                                sync: true,
                                 success: function(json) {
                                     var items = json.listcontainerclusterresponse.containercluster;
                                     args.response.success({
@@ -321,6 +325,66 @@
                                 path: 'ccs.clusterinstances'
                             }],
                             actions: {
+                                start: {
+                                    label: 'Start Container Cluster',
+                                    action: function(args) {
+                                        $.ajax({
+                                            url: createURL("startContainerCluster"),
+                                            data: {"id": args.context.containerclusters[0].id},
+                                            dataType: "json",
+                                            async: true,
+                                            success: function(json) {
+                                                var jid = json.startcontainerclusterresponse.jobid;
+                                                args.response.success({
+                                                    _custom: {
+                                                        jobId: jid
+                                                    }
+                                                });
+                                            }
+                                        });
+                                    },
+                                    messages: {
+                                        confirm: function(args) {
+                                            return 'Please confirm that you want to start this container cluster.';
+                                        },
+                                        notification: function(args) {
+                                            return 'Started container cluster.';
+                                        }
+                                    },
+                                    notification: {
+                                        poll: pollAsyncJobResult
+                                    }
+                                },
+                                stop: {
+                                    label: 'Stop Container Cluster',
+                                    action: function(args) {
+                                        $.ajax({
+                                            url: createURL("stopContainerCluster"),
+                                            data: {"id": args.context.containerclusters[0].id},
+                                            dataType: "json",
+                                            async: true,
+                                            success: function(json) {
+                                                var jid = json.stopcontainerclusterresponse.jobid;
+                                                args.response.success({
+                                                    _custom: {
+                                                        jobId: jid
+                                                    }
+                                                });
+                                            }
+                                        });
+                                    },
+                                    messages: {
+                                        confirm: function(args) {
+                                            return 'Please confirm that you want to stop this container cluster.';
+                                        },
+                                        notification: function(args) {
+                                            return 'Stopped container cluster.';
+                                        }
+                                    },
+                                    notification: {
+                                        poll: pollAsyncJobResult
+                                    }
+                                },
                                 destroy: {
                                     label: 'Destroy Cluster',
                                     compactLabel: 'label.destroy',
@@ -332,8 +396,11 @@
                                         }
                                     },
                                     messages: {
+                                        confirm: function(args) {
+                                            return 'Please confirm that you want to destroy this container cluster.';
+                                        },
                                         notification: function(args) {
-                                            return 'Container Cluster Destroy';
+                                            return 'Destroyed container cluster.';
                                         }
                                     },
                                     action: function(args) {

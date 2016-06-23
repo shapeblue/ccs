@@ -50,5 +50,12 @@ function package_rpm() {
 ROOT=$PWD
 cd $ROOT/../deps && bash -x install.sh && cd $ROOT
 
-package_deb
-package_rpm
+case "$1" in
+  deb ) package_deb
+      ;;
+  rpm ) package_rpm
+      ;;
+  * )   package_deb
+        package_rpm
+      ;;
+esac

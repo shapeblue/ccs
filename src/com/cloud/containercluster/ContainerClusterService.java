@@ -28,6 +28,8 @@ import org.apache.cloudstack.api.response.ListResponse;
 
 public interface ContainerClusterService extends PluggableService {
 
+    ContainerCluster findById(final Long id);
+
     ContainerCluster createContainerCluster(String name,
                                             String displayName,
                                             Long zoneId,
@@ -41,6 +43,8 @@ public interface ContainerClusterService extends PluggableService {
 
     ContainerCluster startContainerCluster(long containerClusterId, boolean onCreate) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException;
+
+    boolean stopContainerCluster(long containerClusterId) throws ManagementServerException;
 
     boolean deleteContainerCluster(Long containerClusterId) throws ManagementServerException;
 

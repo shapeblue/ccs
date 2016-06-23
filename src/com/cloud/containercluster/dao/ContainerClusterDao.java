@@ -29,4 +29,5 @@ public interface ContainerClusterDao extends GenericDao<ContainerClusterVO, Long
     List<ContainerClusterVO> listByAccount(long accountId);
     List<ContainerClusterVO> findContainerClustersToGarbageCollect();
     List<ContainerClusterVO> findContainerClustersInState(ContainerCluster.State state);
+    List<ContainerClusterVO> listByNetworkId(long networkId);
 }

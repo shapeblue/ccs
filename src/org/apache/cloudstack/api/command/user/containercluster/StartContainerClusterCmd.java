@@ -22,6 +22,7 @@ import com.cloud.containercluster.ContainerCluster;
 import com.cloud.containercluster.ContainerClusterService;
 import com.cloud.exception.ConcurrentOperationException;
 import com.cloud.exception.InsufficientCapacityException;
+import com.cloud.exception.ManagementServerException;
 import com.cloud.exception.NetworkRuleConflictException;
 import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
@@ -31,33 +32,31 @@ import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCmd;
 import org.apache.cloudstack.api.Parameter;
+import org.apache.cloudstack.api.ResponseObject;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
-import org.apache.cloudstack.api.response.SuccessResponse;
 import org.apache.cloudstack.context.CallContext;
-import org.apache.log4j.Logger;
 
 import javax.inject.Inject;
 
-@APICommand(name = "deleteContainerCluster",
-        description = "deletes a container cluster",
-        responseObject = SuccessResponse.class,
+@APICommand(name = StartContainerClusterCmd.APINAME, description = "Starts a stopped container cluster",
+        responseObject = ContainerClusterResponse.class,
+        responseView = ResponseObject.ResponseView.Restricted,
         entityType = {ContainerCluster.class},
+        requestHasSensitiveInfo = false,
+        responseHasSensitiveInfo = true,
         authorized = {RoleType.Admin, RoleType.ResourceAdmin, RoleType.DomainAdmin, RoleType.User})
-public class DeleteContainerClusterCmd extends BaseAsyncCmd {
+public class StartContainerClusterCmd extends BaseAsyncCmd {
+    public static final String APINAME = "startContainerCluster";
 
-    public static final Logger s_logger = Logger.getLogger(DeleteContainerClusterCmd.class.getName());
-
-    private static final String s_name = "deletecontaierclusterresponse";
+    @Inject
+    public ContainerClusterService containerClusterService;
 
     /////////////////////////////////////////////////////
     //////////////// API parameters /////////////////////
     /////////////////////////////////////////////////////
-
-    @Parameter(name = ApiConstants.ID,
-            type = CommandType.UUID,
+    @Parameter(name = ApiConstants.ID, type = CommandType.UUID,
             entityType = ContainerClusterResponse.class,
-            required = true,
             description = "the ID of the container cluster")
     private Long id;
 
@@ -69,31 +68,19 @@ public class DeleteContainerClusterCmd extends BaseAsyncCmd {
         return id;
     }
 
-    @Inject
-    public ContainerClusterService _containerClusterService;
-
-    /////////////////////////////////////////////////////
-    /////////////// API Implementation///////////////////
-    /////////////////////////////////////////////////////
-
+    @Override
+    public String getEventType() {
+        return CcsEventTypes.EVENT_CONTAINER_CLUSTER_START;
+    }
 
     @Override
-    public void execute() throws ResourceUnavailableException, InsufficientCapacityException,
-            ServerApiException, ConcurrentOperationException, ResourceAllocationException,
-            NetworkRuleConflictException {
-        try {
-            _containerClusterService.deleteContainerCluster(id);
-            SuccessResponse response = new SuccessResponse(getCommandName());
-            setResponseObject(response);
-        } catch (Exception e) {
-            s_logger.warn("Failed to delete vm container cluster due to " + e);
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to delete vm container cluster");
-        }
+    public String getEventDescription() {
+        return "Starting container cluster id: " + getId();
     }
 
     @Override
     public String getCommandName() {
-        return s_name;
+        return APINAME.toLowerCase() + "response";
     }
 
     @Override
@@ -101,15 +88,33 @@ public class DeleteContainerClusterCmd extends BaseAsyncCmd {
         return CallContext.current().getCallingAccount().getId();
     }
 
+    /////////////////////////////////////////////////////
+    /////////////// API Implementation///////////////////
+    /////////////////////////////////////////////////////
 
-    @Override
-    public String getEventType() {
-        return CcsEventTypes.EVENT_CONTAINER_CLUSTER_DELETE;
+    public ContainerCluster validateRequest() {
+        if (getId() == null || getId() < 1L) {
+            throw new ServerApiException(ApiErrorCode.PARAM_ERROR, "Invalid container cluster ID provided");
+        }
+        final ContainerCluster containerCluster = containerClusterService.findById(getId());
+        if (containerCluster == null) {
+            throw new ServerApiException(ApiErrorCode.PARAM_ERROR, "Given container cluster was not found");
+        }
+        return containerCluster;
     }
 
     @Override
-    public String getEventDescription() {
-        return "Deleting container cluster. Cluster Id: " + getId();
+    public void execute() throws ResourceUnavailableException, InsufficientCapacityException, ServerApiException, ConcurrentOperationException, ResourceAllocationException, NetworkRuleConflictException {
+        final ContainerCluster containerCluster = validateRequest();
+        try {
+            containerClusterService.startContainerCluster(getId(), false);
+            final ContainerClusterResponse response = containerClusterService.createContainerClusterResponse(getId());
+            response.setResponseName(getCommandName());
+            setResponseObject(response);
+        } catch (InsufficientCapacityException | ResourceUnavailableException | ManagementServerException  ex) {
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR,
+                    "Failed to start container cluster:" + containerCluster.getUuid() + " due to " + ex.getMessage());
+        }
     }
 
 }

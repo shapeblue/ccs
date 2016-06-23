@@ -1,7 +1,7 @@
 (function (cloudStack) {
   cloudStack.plugins.ccs.config = {
-    title: 'CloudStack Container Service',
-    desc: 'CloudStack Container Service',
+    title: 'Container Service',
+    desc: 'Container Service',
     externalLink: 'http://shapeblue.com/',
     authorName: 'ShapeBlue Engineering',
     authorEmail: 'engineering@shapeblue.com'

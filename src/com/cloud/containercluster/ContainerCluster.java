@@ -80,8 +80,6 @@ public interface ContainerCluster extends ControlledEntity, com.cloud.utils.fsm.
             s_fsm.addTransition(State.Scaling, Event.OperationSucceeded, State.Running);
             s_fsm.addTransition(State.Scaling, Event.OperationFailed, State.Alert);
 
-            s_fsm.addTransition(State.Running, Event.FaultsDetected, State.Alert);
-
             s_fsm.addTransition(State.Alert, Event.RecoveryRequested, State.Recovering);
             s_fsm.addTransition(State.Recovering, Event.OperationSucceeded, State.Running);
             s_fsm.addTransition(State.Recovering, Event.OperationFailed, State.Alert);
