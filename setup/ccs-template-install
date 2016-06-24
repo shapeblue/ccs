@@ -127,7 +127,7 @@ request = {'name': name, 'displaytext': displaytext, 'format': args.format, 'hyp
 
 api_url = raw_input("API url:")
 api_key = getpass.getpass("API Key:")
-secret_key = getpass.getpass("Secreat:")
+secret_key = getpass.getpass("Secret:")
 
 api = CloudStack(api_url, api_key, secret_key)
 try:
