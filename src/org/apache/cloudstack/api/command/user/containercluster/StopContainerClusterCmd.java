@@ -37,6 +37,7 @@ import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.cloudstack.api.response.SuccessResponse;
 import org.apache.cloudstack.context.CallContext;
+import org.apache.log4j.Logger;
 
 import javax.inject.Inject;
 
@@ -48,6 +49,9 @@ import javax.inject.Inject;
         responseHasSensitiveInfo = true,
         authorized = {RoleType.Admin, RoleType.ResourceAdmin, RoleType.DomainAdmin, RoleType.User})
 public class StopContainerClusterCmd extends BaseAsyncCmd {
+
+    public static final Logger s_logger = Logger.getLogger(StopContainerClusterCmd.class.getName());
+
     public static final String APINAME = "stopContainerCluster";
 
     @Inject
@@ -113,8 +117,9 @@ public class StopContainerClusterCmd extends BaseAsyncCmd {
             response.setSuccess(result);
             setResponseObject(response);
         } catch (ManagementServerException ex) {
+            s_logger.warn("Failed to stop container cluster:" + containerCluster.getUuid() + " due to " + ex.getMessage());
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR,
-                    "Failed to stop container cluster:" + containerCluster.getUuid() + " due to " + ex.getMessage());
+                    "Failed to stop container cluster:" + containerCluster.getUuid(), ex);
         }
     }
 
