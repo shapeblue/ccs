@@ -395,12 +395,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         } catch (RuntimeException e) {
             stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
             s_logger.warn("Starting the network failed as part of starting container cluster " + containerCluster.getName() + " due to " + e);
-            throw new ManagementServerException("Failed to start the network while creating container cluster " + containerCluster.getName(), e);
+            throw new ManagementServerException("Failed to start the network while creating container cluster name:" + containerCluster.getName(), e);
         } catch(Exception e) {
             stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
             s_logger.warn("Starting the network failed as part of starting container cluster " + containerCluster.getName() + " due to " + e);
-            throw new ManagementServerException("Failed to start the network while creating container cluster "
-                    + containerCluster.getName(), e);
+            throw new ManagementServerException("Failed to start the network while creating container cluster name:" + containerCluster.getName(), e);
         }
 
         IPAddressVO publicIp = null;
@@ -585,6 +584,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 startK8SVM(vm, containerCluster);
             } catch (ServerApiException ex) {
                 s_logger.warn("Failed to start VM in container cluster id:" + containerClusterId + " due to " + ex);
+                // dont bail out here. proceed further to stop the reset of the VM's
             }
         }
 
@@ -597,6 +597,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         }
 
         stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
+        if (s_logger.isDebugEnabled()) {
+            s_logger.debug(" Container cluster name:" + containerCluster.getName() + " is successfully started.");
+        }
         return true;
     }
 
@@ -641,6 +644,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 s_logger.debug("Provisioned firewall rule to open up port 443 on " + publicIp.getAddress() +
                         " for cluster " + containerCluster.getName());
             }
+        } catch (RuntimeException rte) {
+            s_logger.warn("Failed to provision firewall rules for the container cluster: " + containerCluster.getName()
+                    + " due to exception: " + getStackTrace(rte));
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+            throw new ManagementServerException("Failed to provision firewall rules for the container " +
+                    "cluster: " + containerCluster.getName(), rte);
         } catch (Exception e) {
             s_logger.warn("Failed to provision firewall rules for the container cluster: " + containerCluster.getName()
                     + " due to exception: " + getStackTrace(e));
@@ -679,10 +688,14 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 s_logger.debug("Provisioning port forwarding rule from port 443 on " + publicIp.getAddress() +
                         " to the master VM IP :" + masterIpFinal + " in container cluster " + containerCluster.getName());
             }
+        } catch (RuntimeException rte) {
+            s_logger.warn("Failed to activate port forwarding rules for the container cluster " + containerCluster.getName() + " due to "  + rte);
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+            throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName(), rte);
         } catch (Exception e) {
             s_logger.warn("Failed to activate port forwarding rules for the container cluster " + containerCluster.getName() + " due to "  + e);
             stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
-            throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName() + " due to " + e);
+            throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName(), e);
         }
     }
 
@@ -1031,8 +1044,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 return clusterDetails;
                 }
             });
+        } catch (RuntimeException e ) {
+            s_logger.error("Failed to read kubernetes master configuration file due to " + e);
+            throw new ManagementServerException("Failed to read kubernetes master configuration file", e);
         } catch (Exception e) {
-            s_logger.error("Failed to read kubernetes master configuration file");
+            s_logger.error("Failed to read kubernetes master configuration file due to " + e);
+            throw new ManagementServerException("Failed to read kubernetes master configuration file", e);
         }
 
         String base64UserData = Base64.encodeBase64String(k8sMasterConfig.getBytes(Charset.forName("UTF-8")));
@@ -1079,9 +1096,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             k8sNodeConfig = readFile(nodeCloudConfig).toString();
             String masterIPString = "{{ k8s_master.default_ip }}";
             k8sNodeConfig = k8sNodeConfig.replace(masterIPString, masterIp);
+        } catch (RuntimeException e ) {
+            s_logger.warn("Failed to read node configuration file due to " + e );
+            throw new ManagementServerException("Failed to read cluster node configuration file.", e);
         } catch (Exception e) {
-            s_logger.warn("Failed to read node configuration file ");
-            throw new ManagementServerException("Failed to read cluster node configuration file.");
+            s_logger.warn("Failed to read node configuration file due to " + e );
+            throw new ManagementServerException("Failed to read cluster node configuration file.", e);
         }
 
         String base64UserData = Base64.encodeBase64String(k8sNodeConfig.getBytes(Charset.forName("UTF-8")));
@@ -1114,28 +1134,26 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 s_logger.debug("Started VM in the container cluster: " + containerCluster.getName());
             }
         } catch (ConcurrentOperationException ex) {
-            s_logger.warn("Failed to start VM in the container cluster: " +
-                    containerCluster.getName() + " due to Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to start VM in the container cluster: ");
+            s_logger.warn("Failed to start VM in the container cluster name:" + containerCluster.getName() + " due to Exception: " , ex);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to start VM in the container cluster name:" + containerCluster.getName(), ex);
         } catch (ResourceUnavailableException ex) {
-            s_logger.warn("Failed to start VM in the container cluster: " +
-                    containerCluster.getName() + " due to Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.RESOURCE_UNAVAILABLE_ERROR, "Failed to start VM in the container cluster: ");
+            s_logger.warn("Failed to start VM in the container cluster name:" + containerCluster.getName() + " due to Exception: " , ex);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to start VM in the container cluster name:" + containerCluster.getName(), ex);
         } catch (InsufficientCapacityException ex) {
-            s_logger.warn("Failed to start VM in the container cluster: " +
-                    containerCluster.getName() + " due to Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.INSUFFICIENT_CAPACITY_ERROR, "Failed to start VM in the container cluster: ");
+            s_logger.warn("Failed to start VM in the container cluster name:" + containerCluster.getName() + " due to Exception: " , ex);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to start VM in the container cluster name:" + containerCluster.getName(), ex);
+        } catch (RuntimeException ex) {
+            s_logger.warn("Failed to start VM in the container cluster name:" + containerCluster.getName() + " due to Exception: " , ex);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to start VM in the container cluster name:" + containerCluster.getName(), ex);
         } catch (Exception ex) {
-            s_logger.warn("Failed to start VM in the container cluster: " +
-                    containerCluster.getName() + " due to Exception: ", ex);
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to start VM in the container cluster: ");
+            s_logger.warn("Failed to start VM in the container cluster name:" + containerCluster.getName() + " due to Exception: " , ex);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to start VM in the container cluster name:" + containerCluster.getName(), ex);
         }
 
         UserVm startVm = _vmDao.findById(vm.getId());
         if (!startVm.getState().equals(VirtualMachine.State.Running)) {
             s_logger.warn("Failed to start VM instance.");
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR,
-                    "Failed to start VM instance in container cluster " + containerCluster.getName());
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to start VM instance in container cluster " + containerCluster.getName());
         }
     }
 
@@ -1397,10 +1415,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                                         " garbage collected. Will be attempted to garbage collected in next run");
                             }
                         }
+                    } catch (RuntimeException e) {
+                        s_logger.debug("Faied to destroy container cluster name:" + containerCluster.getName() + " during GC due to " + e);
+                        // proceed furhter with rest of the container cluster garbage collection
                     } catch (Exception e) {
-                        if (s_logger.isDebugEnabled()) {
-                            s_logger.debug("Faied to destroy container cluster name:" + containerCluster.getName() + " due to " + e);
-                        }
+                        s_logger.debug("Faied to destroy container cluster name:" + containerCluster.getName() + " during GC due to " + e);
+                        // proceed furhter with rest of the container cluster garbage collection
                     }
                 }
             } catch (Exception e) {
@@ -1482,12 +1502,14 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                             stateTransitTo(containerCluster.getId(), ContainerCluster.Event.OperationSucceeded);
                         }
                     } catch (Exception e) {
-                        s_logger.warn("Failed to run through VM states of container cluster due to " + e);
+                        s_logger.warn("Failed to run through VM states of container cluster status scanner due to " + e);
                     }
                 }
 
+            } catch (RuntimeException e) {
+                s_logger.warn("Caught exception while running container cluster state scanner.", e);
             } catch (Exception e) {
-                s_logger.warn("Caught exception while running container cluster gc: ", e);
+                s_logger.warn("Caught exception while running container cluster state scanner.", e);
             }
         }
     }
