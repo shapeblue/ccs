@@ -186,23 +186,14 @@ for full help
                     self.errorAndExit("Invalid host and port format, it must be in format of host:port (%s)"%info)
                 return host, port
 
-            def parseUserAndPassword(cred):
-                stuff = cred.split(':')
-                if len(stuff) != 1 and len(stuff) != 2:
-                    self.errorAndExit("Invalid user name and password format, must be in format of user:password (%s)"%cred)
-                user = stuff[0]
+            def parseUser(user):
                 if len(user) < 1:
-                    self.errorAndExit("Invalid user name and password format, must be in format of user:password, user name can not be empty")
-                if len(stuff) == 1:
-                    password = ''
-                else:
-                    password = stuff[1]
+                    self.errorAndExit("Invalid user name, user name can not be empty")
 
-                forbidden = "' \\`"
+                forbidden = "' \\`:"
                 for f in forbidden:
                     if f in user: self.errorAndExit("User name cannot have the %r characters"%f)
-                    if f in password: self.errorAndExit("Password cannot have the %r characters"%f)
-                return user, password
+                return user
 
             if self.args.creds:
                 try:
@@ -215,8 +206,9 @@ for full help
                 finally:
                     stuff = [self.args.creds[:splitIndex], self.args.creds[splitIndex+1:]]
 
-                self.user,self.password = parseUserAndPassword(stuff[0])
+                self.user = parseUser(stuff[0])
                 self.host,self.port = parseHostInfo(stuff[1])
+                self.password = getpass.getpass("Password for " + self.user + ":")
             else:
                 self.user = raw_input("Username:") 
                 self.password = getpass.getpass("Password for " + self.user + ":")
