@@ -123,7 +123,7 @@ except:
 name = 'ShapeBlue-CCS-Template'
 displaytext = 'ShapeBlue-CCS-Template'
 
-request = {'name': name, 'displaytext': displaytext, 'format': args.format, 'hypervisor': args.hypervisor, 'ostypeid': '99', 'url': args.url, 'zoneid': args.zoneid, 'isextractable': args.extractable, 'ispublic':'true', 'isfeatured':'true'}
+request = {'name': name, 'displaytext': displaytext, 'format': args.format, 'hypervisor': args.hypervisor, 'ostypeid': '255', 'url': args.url, 'zoneid': args.zoneid, 'isextractable': args.extractable, 'ispublic':'true', 'isfeatured':'true'}
 
 api_url = raw_input("API url:")
 api_key = getpass.getpass("API Key:")
