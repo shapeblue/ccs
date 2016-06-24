@@ -891,7 +891,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     }
 
     @Override
-    public boolean deleteContainerCluster(Long containerClusterId) {
+    public boolean deleteContainerCluster(Long containerClusterId) throws ManagementServerException {
 
         ContainerClusterVO cluster = _containerClusterDao.findById(containerClusterId);
         if (cluster == null) {
@@ -906,7 +906,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return cleanupContainerClusterResources(containerClusterId);
     }
 
-    private boolean cleanupContainerClusterResources(Long containerClusterId) {
+    private boolean cleanupContainerClusterResources(Long containerClusterId) throws ManagementServerException {
 
         ContainerClusterVO cluster = _containerClusterDao.findById(containerClusterId);
 
@@ -974,7 +974,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 cluster = _containerClusterDao.findById(containerClusterId);
                 cluster.setCheckForGc(true);
                 _containerClusterDao.update(cluster.getId(), cluster);
-                return false;
+
+                throw new ManagementServerException("Failed to delete the network as part of container cluster name:" + cluster.getName() + " clean up");
             }
         } else {
             if (s_logger.isDebugEnabled()) {
@@ -984,7 +985,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             cluster = _containerClusterDao.findById(containerClusterId);
             cluster.setCheckForGc(true);
             _containerClusterDao.update(cluster.getId(), cluster);
-            return false;
+
+            throw new ManagementServerException("Failed to destroy one or more VM's as part of container cluster name:" + cluster.getName() + " clean up");
         }
 
         stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
