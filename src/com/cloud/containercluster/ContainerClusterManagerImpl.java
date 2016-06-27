@@ -281,14 +281,16 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             throw new InvalidParameterValueException("This service offering is not suitable for k8s cluster, service offering id is " + networkId);
         }
 
+        plan(clusterSize, zoneId, _srvOfferingDao.findById(serviceOfferingId));
+
         Network network = null;
         if (networkId != null) {
-            if (_containerClusterDao.listByNetworkId(networkId).isEmpty()){
+            if (_containerClusterDao.listByNetworkId(networkId).isEmpty()) {
                 network = _networkService.getNetwork(networkId);
                 if (network == null) {
                     throw new InvalidParameterValueException("Unable to find network by ID " + networkId);
                 }
-                if (! validateNetwork(network)){
+                if (!validateNetwork(network)){
                     throw new InvalidParameterValueException("This network is not suitable for k8s cluster, network id is " + networkId);
                 }
                 _networkModel.checkNetworkPermissions(owner, network);
@@ -300,8 +302,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             NetworkOfferingVO networkOffering = _networkOfferingDao.findByUniqueName(
                     _globalConfigDao.getValue(CcsConfig.ContainerClusterNetworkOffering.key()));
 
-            long physicalNetworkId = _networkModel.findPhysicalNetworkId(zone.getId(), networkOffering.getTags(),
-                    networkOffering.getTrafficType());
+            long physicalNetworkId = _networkModel.findPhysicalNetworkId(zone.getId(), networkOffering.getTags(), networkOffering.getTrafficType());
             PhysicalNetwork physicalNetwork = _physicalNetworkDao.findById(physicalNetworkId);
 
             if (s_logger.isDebugEnabled()) {
@@ -734,23 +735,16 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return true;
     }
 
-    public DeployDestination plan(final long containerClusterId, final long dcId) throws InsufficientServerCapacityException {
-        ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
-        ServiceOffering offering = _srvOfferingDao.findById(containerCluster.getServiceOfferingId());
-
-        if (s_logger.isDebugEnabled()){
-            s_logger.debug("Checking deployment destination for containerClusterId= " + containerClusterId + " in dcId=" + dcId);
-        }
-
+    public DeployDestination plan(final long clusterSize, final long dcId, final ServiceOffering offering) throws InsufficientServerCapacityException {
         final int cpu_requested = offering.getCpu() * offering.getSpeed();
         final long ram_requested = offering.getRamSize() * 1024L * 1024L;
-        List<HostVO> hosts = _resourceMgr.listAllHostsInAllZonesByType(Type.Routing);
+        List<HostVO> hosts = _resourceMgr.listAllHostsInOneZoneByType(Type.Routing, dcId);
         final Map<String, Pair<HostVO, Integer>> hosts_with_resevered_capacity = new ConcurrentHashMap<String, Pair<HostVO, Integer>>();
         for (HostVO h : hosts) {
            hosts_with_resevered_capacity.put(h.getUuid(), new Pair<HostVO, Integer>(h, 0));
         }
         boolean suitable_host_found=false;
-        for (int i=1; i <= containerCluster.getNodeCount() + 1; i++) {
+        for (int i=1; i <= clusterSize+1; i++) {
             suitable_host_found=false;
             for (Map.Entry<String, Pair<HostVO, Integer>> hostEntry : hosts_with_resevered_capacity.entrySet()) {
                 Pair<HostVO, Integer> hp = hostEntry.getValue();
@@ -791,9 +785,20 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             return new DeployDestination(_dcDao.findById(dcId), null, null, null);
         }
         s_logger.warn(String.format("Cannot find enough capacity for container_cluster(requested cpu=%1$s memory=%2$s)",
-                cpu_requested*containerCluster.getNodeCount(), ram_requested*containerCluster.getNodeCount()));
+                cpu_requested*clusterSize, ram_requested*clusterSize));
         throw new InsufficientServerCapacityException(String.format("Cannot find enough capacity for container_cluster(requested cpu=%1$s memory=%2$s)",
-                cpu_requested*containerCluster.getNodeCount(), ram_requested*containerCluster.getNodeCount()), DataCenter.class, dcId);
+                cpu_requested*clusterSize, ram_requested*clusterSize), DataCenter.class, dcId);
+    }
+
+    public DeployDestination plan(final long containerClusterId, final long dcId) throws InsufficientServerCapacityException {
+        ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
+        ServiceOffering offering = _srvOfferingDao.findById(containerCluster.getServiceOfferingId());
+
+        if (s_logger.isDebugEnabled()){
+            s_logger.debug("Checking deployment destination for containerClusterId= " + containerClusterId + " in dcId=" + dcId);
+        }
+
+        return plan(containerCluster.getNodeCount() + 1, dcId, offering);
     }
 
     @Override
