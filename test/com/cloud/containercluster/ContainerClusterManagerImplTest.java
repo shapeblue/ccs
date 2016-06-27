@@ -214,8 +214,7 @@ public class ContainerClusterManagerImplTest {
         h1.setClusterId(1L);
         h1.setUuid("uuid-test");
         hl.add(h1);
-        when(resourceMgr.listAllHostsInAllZonesByType(Type.Routing)).thenReturn(hl);
-
+        when(resourceMgr.listAllHostsInOneZoneByType(Type.Routing, 1)).thenReturn(hl);
         ClusterVO cluster = new ClusterVO(1L);
         when(clusterDao.findById(1L)).thenReturn(cluster);
 
