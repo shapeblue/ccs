@@ -208,26 +208,26 @@ public class CreateContainerClusterCmd extends BaseAsyncCreateCmd {
         ContainerCluster containerCluster;
 
         try {
-            _containerClusterService.startContainerCluster(getEntityId());
+            _containerClusterService.startContainerCluster(getEntityId(), true);
             ContainerClusterResponse response = _containerClusterService.createContainerClusterResponse(getEntityId());
             response.setResponseName(getCommandName());
             setResponseObject(response);
         } catch (InsufficientCapacityException ex) {
             s_logger.warn("Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
             throw new ServerApiException(ApiErrorCode.INSUFFICIENT_CAPACITY_ERROR,
-                    "Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
+                    "Failed to deploy container cluster:" + getEntityUuid(), ex);
         } catch (ResourceUnavailableException ex) {
             s_logger.warn("Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
             throw new ServerApiException(ApiErrorCode.RESOURCE_UNAVAILABLE_ERROR,
-                    "Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
+                    "Failed to deploy container cluster:" + getEntityUuid(), ex);
         } catch (ResourceAllocationException ex) {
             s_logger.warn("Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
             throw new ServerApiException(ApiErrorCode.RESOURCE_ALLOCATION_ERROR,
-                    "Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
+                    "Failed to deploy container cluster:" + getEntityUuid(), ex);
         } catch (ManagementServerException ex) {
             s_logger.warn("Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR,
-                    "Failed to deploy container cluster:" + getEntityUuid() + " due to " + ex.getMessage());
+                    "Failed to deploy container cluster:" + getEntityUuid(), ex);
         }
     }
 

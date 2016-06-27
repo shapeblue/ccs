@@ -61,7 +61,7 @@ install:
 	cp -r ../ui/plugins/ccs $(DESTDIR)/usr/share/$(PACKAGE)-management/webapps/client/plugins/
 	cp -r ../schema/* $(DESTDIR)/usr/share/$(PACKAGE)-management/setup/
 	cp -r ../conf/* $(DESTDIR)/$(SYSCONFDIR)/$(PACKAGE)/management/
-	cp -r ../setup/* $(DESTDIR)/$(USRBINDIR)/
+	cp -r ../scripts/setup/* $(DESTDIR)/$(USRBINDIR)/
 
 	dh_installdirs
 	dh_install

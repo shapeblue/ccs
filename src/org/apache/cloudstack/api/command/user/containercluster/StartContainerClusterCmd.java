@@ -36,6 +36,7 @@ import org.apache.cloudstack.api.ResponseObject;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.cloudstack.context.CallContext;
+import org.apache.log4j.Logger;
 
 import javax.inject.Inject;
 
@@ -47,6 +48,9 @@ import javax.inject.Inject;
         responseHasSensitiveInfo = true,
         authorized = {RoleType.Admin, RoleType.ResourceAdmin, RoleType.DomainAdmin, RoleType.User})
 public class StartContainerClusterCmd extends BaseAsyncCmd {
+
+    public static final Logger s_logger = Logger.getLogger(StartContainerClusterCmd.class.getName());
+
     public static final String APINAME = "startContainerCluster";
 
     @Inject
@@ -107,13 +111,14 @@ public class StartContainerClusterCmd extends BaseAsyncCmd {
     public void execute() throws ResourceUnavailableException, InsufficientCapacityException, ServerApiException, ConcurrentOperationException, ResourceAllocationException, NetworkRuleConflictException {
         final ContainerCluster containerCluster = validateRequest();
         try {
-            containerClusterService.startContainerCluster(getId());
+            containerClusterService.startContainerCluster(getId().longValue(), false);
             final ContainerClusterResponse response = containerClusterService.createContainerClusterResponse(getId());
             response.setResponseName(getCommandName());
             setResponseObject(response);
         } catch (InsufficientCapacityException | ResourceUnavailableException | ManagementServerException  ex) {
+            s_logger.warn("Failed to start container cluster:" + containerCluster.getUuid() + " due to " + ex.getMessage());
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR,
-                    "Failed to start container cluster:" + containerCluster.getUuid() + " due to " + ex.getMessage());
+                    "Failed to start container cluster:" + containerCluster.getUuid(), ex);
         }
     }
 

@@ -22,8 +22,11 @@ import com.cloud.utils.db.SearchCriteria.Op;
 
 import org.springframework.stereotype.Component;
 
+import com.cloud.containercluster.ContainerCluster.Event;
 import com.cloud.containercluster.ContainerClusterVO;
 import com.cloud.utils.db.GenericDaoBase;
+import com.cloud.utils.db.TransactionLegacy;
+import com.cloud.containercluster.ContainerCluster;
 import com.cloud.utils.db.QueryBuilder;
 
 import java.util.List;
@@ -32,11 +35,22 @@ import java.util.List;
 public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, Long> implements ContainerClusterDao {
 
     private final SearchBuilder<ContainerClusterVO> AccountIdSearch;
+    private final SearchBuilder<ContainerClusterVO> GarbageCollectedSearch;
+    private final SearchBuilder<ContainerClusterVO> StateSearch;
 
     public ContainerClusterDaoImpl() {
         AccountIdSearch = createSearchBuilder();
         AccountIdSearch.and("account", AccountIdSearch.entity().getAccountId(), SearchCriteria.Op.EQ);
         AccountIdSearch.done();
+
+        GarbageCollectedSearch = createSearchBuilder();
+        GarbageCollectedSearch.and("gc", GarbageCollectedSearch.entity().ischeckForGc(), SearchCriteria.Op.EQ);
+        GarbageCollectedSearch.and("state", GarbageCollectedSearch.entity().getState(), SearchCriteria.Op.NEQ);
+        GarbageCollectedSearch.done();
+
+        StateSearch = createSearchBuilder();
+        StateSearch.and("state", StateSearch.entity().getState(), SearchCriteria.Op.EQ);
+        StateSearch.done();
     }
 
     @Override
@@ -47,6 +61,36 @@ public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, 
     }
 
     @Override
+    public List<ContainerClusterVO> findContainerClustersToGarbageCollect() {
+        SearchCriteria<ContainerClusterVO> sc = GarbageCollectedSearch.create();
+        sc.setParameters("gc", true);
+        sc.setParameters("state", ContainerCluster.State.Destroying);
+        return listBy(sc);
+    }
+
+    @Override
+    public List<ContainerClusterVO> findContainerClustersInState(ContainerCluster.State state) {
+        SearchCriteria<ContainerClusterVO> sc = StateSearch.create();
+        sc.setParameters("state", state);
+        return listBy(sc);
+    }
+
+    @Override
+    public boolean updateState(com.cloud.containercluster.ContainerCluster.State currentState, Event event,
+                               com.cloud.containercluster.ContainerCluster.State nextState,
+                               ContainerCluster vo, Object data) {
+        // TODO: ensure this update is correct
+        TransactionLegacy txn = TransactionLegacy.currentTxn();
+        txn.start();
+
+        ContainerClusterVO ccVo = (ContainerClusterVO)vo;
+        ccVo.setState(nextState);
+        super.update(ccVo.getId(), ccVo);
+
+        txn.commit();
+        return true;
+    }
+
     public List<ContainerClusterVO> listByNetworkId(long networkId) {
         QueryBuilder<ContainerClusterVO> sc = QueryBuilder.create(ContainerClusterVO.class);
         sc.and(sc.entity().getNetworkId(), Op.EQ, networkId);

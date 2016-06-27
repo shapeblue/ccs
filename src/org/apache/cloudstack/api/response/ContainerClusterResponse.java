@@ -131,6 +131,10 @@ public class ContainerClusterResponse extends BaseResponse implements Controlled
 
     public void setConsoleEndpoint(String consoleendpoint) {this.consoleendpoint = consoleendpoint;}
 
+    public String getId() {
+        return this.id;
+    }
+
     public void setId(String id) {
         this.id = id;
     }
@@ -147,7 +151,23 @@ public class ContainerClusterResponse extends BaseResponse implements Controlled
 
     public void setUsername(String userName) { this.username = userName;}
 
+    public String getPassword() {
+        return password;
+    }
+
     public void setPassword(String password) { this.password = password;}
+
+    public String getUsername() {
+        return username;
+    }
+
+    public List<String> getVirtualMachineIds() {
+        return virtualMachineIds;
+    }
+
+    public String getConsoleendpoint() {
+        return consoleendpoint;
+    }
 
     @SerializedName(ApiConstants.ID)
     @Param(description = "the id of the container cluster")
@@ -188,6 +208,10 @@ public class ContainerClusterResponse extends BaseResponse implements Controlled
     @SerializedName(ApiConstants.ASSOCIATED_NETWORK_NAME)
     @Param(description = "the name of the Network associated with the IP address")
     private String associatedNetworkName;
+
+    public String getAssociatedNetworkName() {
+        return associatedNetworkName;
+    }
 
     public void setAssociatedNetworkName(String associatedNetworkName) {
         this.associatedNetworkName = associatedNetworkName;

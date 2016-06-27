@@ -41,7 +41,7 @@ public interface ContainerClusterService extends PluggableService {
                                             ) throws InsufficientCapacityException,
                      ResourceAllocationException, ManagementServerException;
 
-    ContainerCluster startContainerCluster(long containerClusterId) throws ManagementServerException,
+    boolean startContainerCluster(long containerClusterId, boolean onCreate) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException;
 
     boolean stopContainerCluster(long containerClusterId) throws ManagementServerException;
