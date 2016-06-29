@@ -12,6 +12,16 @@ write-files:
     content: |
       {{ k8s_master.password }},{{ k8s_master.user }},1
 
+  - path: /opt/bin/kube-apiserver.crt
+    permissions: '0644'
+    content: |
+      {{ k8s_master.apiserver.crt }}
+
+  - path: /opt/bin/kube-apiserver.key
+    permissions: '0644'
+    content: |
+      {{ k8s_master.apiserver.key }}
+
   - path: /opt/bin/wupiao
     permissions: '0755'
     content: |
@@ -160,6 +170,8 @@ coreos:
         --allow-privileged=true \
         --insecure-port=8080 \
         --secure-port=443 \
+        --tls-cert-file=/opt/bin/kube-apiserver.crt \
+        --tls-private-key-file=/opt/bin/kube-apiserver.key \
         --service-cluster-ip-range=10.0.0.0/16 \
         --etcd-servers=http://127.0.0.1:2379 \
         --bind-address=0.0.0.0 \

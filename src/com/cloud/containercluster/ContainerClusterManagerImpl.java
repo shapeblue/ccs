@@ -57,6 +57,7 @@ import com.cloud.network.rules.PortForwardingRuleVO;
 import com.cloud.network.rules.RulesService;
 import com.cloud.network.rules.dao.PortForwardingRulesDao;
 import com.cloud.offering.NetworkOffering;
+import com.cloud.offering.ServiceOffering;
 import com.cloud.offerings.NetworkOfferingVO;
 import com.cloud.offerings.dao.NetworkOfferingDao;
 import com.cloud.offerings.dao.NetworkOfferingServiceMapDao;
@@ -68,6 +69,8 @@ import com.cloud.storage.VMTemplateVO;
 import com.cloud.storage.VMTemplateZoneVO;
 import com.cloud.storage.dao.VMTemplateDao;
 import com.cloud.storage.dao.VMTemplateZoneDao;
+import com.cloud.template.VirtualMachineTemplate;
+import com.cloud.user.Account;
 import com.cloud.user.AccountManager;
 import com.cloud.user.SSHKeyPairVO;
 import com.cloud.user.User;
@@ -77,27 +80,25 @@ import com.cloud.uservm.UserVm;
 import com.cloud.utils.Pair;
 import com.cloud.utils.component.ComponentContext;
 import com.cloud.utils.component.ManagerBase;
+import com.cloud.utils.concurrency.NamedThreadFactory;
 import com.cloud.utils.db.Filter;
+import com.cloud.utils.db.GlobalLock;
 import com.cloud.utils.db.Transaction;
 import com.cloud.utils.db.TransactionCallback;
 import com.cloud.utils.db.TransactionCallbackWithException;
 import com.cloud.utils.db.TransactionStatus;
+import com.cloud.utils.fsm.NoTransitionException;
+import com.cloud.utils.fsm.StateMachine2;
 import com.cloud.utils.net.Ip;
 import com.cloud.vm.Nic;
 import com.cloud.vm.ReservationContext;
 import com.cloud.vm.ReservationContextImpl;
 import com.cloud.vm.UserVmService;
 import com.cloud.vm.UserVmVO;
-import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.VMInstanceVO;
+import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.dao.UserVmDao;
 import com.cloud.vm.dao.VMInstanceDao;
-import com.cloud.offering.ServiceOffering;
-import com.cloud.template.VirtualMachineTemplate;
-import com.cloud.user.Account;
-import com.cloud.utils.db.GlobalLock;
-import com.cloud.utils.fsm.StateMachine2;
-import com.cloud.utils.fsm.NoTransitionException;
 import org.apache.cloudstack.acl.ControlledEntity;
 import org.apache.cloudstack.acl.SecurityChecker;
 import org.apache.cloudstack.api.ApiErrorCode;
@@ -115,40 +116,71 @@ import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
+import org.apache.cloudstack.framework.security.keystore.KeystoreDao;
+import org.apache.cloudstack.framework.security.keystore.KeystoreVO;
 import org.apache.cloudstack.managed.context.ManagedContextRunnable;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.log4j.Logger;
+import org.bouncycastle.asn1.ASN1Encodable;
+import org.bouncycastle.asn1.DERSequence;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.X509Extensions;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openssl.PEMReader;
+import org.bouncycastle.openssl.PEMWriter;
+import org.bouncycastle.util.io.pem.PemObject;
+import org.bouncycastle.x509.X509V1CertificateGenerator;
+import org.bouncycastle.x509.X509V3CertificateGenerator;
+import org.bouncycastle.x509.extension.AuthorityKeyIdentifierStructure;
+import org.bouncycastle.x509.extension.SubjectKeyIdentifierStructure;
+import org.joda.time.DateTime;
+import org.joda.time.DateTimeZone;
 
 import javax.ejb.Local;
 import javax.inject.Inject;
+import javax.naming.ConfigurationException;
+import javax.security.auth.x500.X500Principal;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.security.InvalidKeyException;
+import java.security.KeyFactory;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.PrivateKey;
+import java.security.SecureRandom;
+import java.security.Security;
+import java.security.SignatureException;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.CertificateParsingException;
+import java.security.cert.X509Certificate;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
-import java.security.SecureRandom;
-import com.cloud.utils.concurrency.NamedThreadFactory;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import javax.naming.ConfigurationException;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Local(value = {ContainerClusterManager.class})
 public class ContainerClusterManagerImpl extends ManagerBase implements ContainerClusterManager, ContainerClusterService {
@@ -160,6 +192,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     ScheduledExecutorService _gcExecutor;
     ScheduledExecutorService _stateScanner;
 
+    @Inject
+    protected KeystoreDao keystoreDao;
     @Inject
     protected ContainerClusterDao _containerClusterDao;
     @Inject
@@ -450,7 +484,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         UserVm k8sMasterVM = null;
         try {
-            k8sMasterVM = createK8SMaster(containerCluster);
+            k8sMasterVM = createK8SMaster(containerCluster, publicIp);
             if (s_logger.isDebugEnabled()) {
                 s_logger.debug("Provisioned the master VM's in to the container cluster name:" + containerCluster.getName());
             }
@@ -1093,7 +1127,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     }
 
 
-    UserVm createK8SMaster(final ContainerClusterVO containerCluster) throws ManagementServerException,
+    UserVm createK8SMaster(final ContainerClusterVO containerCluster, final IPAddressVO publicIP) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
 
         UserVm masterVm = null;
@@ -1117,11 +1151,33 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         try {
             String masterCloudConfig = _globalConfigDao.getValue(CcsConfig.ContainerClusterMasterCloudConfig.key());
             k8sMasterConfig = readFile(masterCloudConfig);
-            ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
-            final String password = "{{ k8s_master.password }}";
+            SecureRandom random = new SecureRandom();
+
+            final String randomPassword = new BigInteger(130, random).toString(32);
             final String user = "{{ k8s_master.user }}";
-            k8sMasterConfig = k8sMasterConfig.replace(password, clusterDetails.getPassword());
-            k8sMasterConfig = k8sMasterConfig.replace(user, clusterDetails.getUserName());
+            final String password = "{{ k8s_master.password }}";
+            final String apiServerCert = "{{ k8s_master.apiserver.crt }}";
+            final String apiServerKey = "{{ k8s_master.apiserver.key }}";
+
+            final KeyPair keyPair = generateRandomKeyPair();
+            final String tlsClientCert = X509CertificateToPem(generateClientCertificate(keyPair, publicIP.getAddress().addr()));
+            final String tlsPrivateKey = RSAPrivateKeyToPem(keyPair.getPrivate());
+
+            k8sMasterConfig = k8sMasterConfig.replace(password, randomPassword);
+            k8sMasterConfig = k8sMasterConfig.replace(user, "admin");
+            k8sMasterConfig = k8sMasterConfig.replace(apiServerCert, tlsClientCert.replace("\n", "\n      "));
+            k8sMasterConfig = k8sMasterConfig.replace(apiServerKey, tlsPrivateKey.replace("\n", "\n      "));
+
+            ContainerClusterDetailsVO cluster = Transaction.execute(new TransactionCallback<ContainerClusterDetailsVO>() {
+
+                @Override
+                public ContainerClusterDetailsVO doInTransaction(TransactionStatus status) {
+                    ContainerClusterDetailsVO clusterDetails = new ContainerClusterDetailsVO(containerCluster.getId(),
+                            "admin", randomPassword);
+                    _containerClusterDetailsDao.persist(clusterDetails);
+                return clusterDetails;
+                }
+            });
         } catch (RuntimeException e ) {
             s_logger.error("Failed to read kubernetes master configuration file due to " + e);
             throw new ManagementServerException("Failed to read kubernetes master configuration file", e);
@@ -1668,6 +1724,135 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         _configParams = params;
         _gcExecutor = Executors.newScheduledThreadPool(1, new NamedThreadFactory("Container-Cluster-Scavenger"));
         _stateScanner = Executors.newScheduledThreadPool(1, new NamedThreadFactory("Container-Cluster-State-Scanner"));
+
+        final KeystoreVO keyStoreVO = keystoreDao.findByName(CCS_ROOTCA_KEYPAIR);
+        if (keyStoreVO == null) {
+                try {
+                    final KeyPair keyPair = generateRandomKeyPair();
+                    final String rootCACert = X509CertificateToPem(generateRootCACertificate(keyPair));
+                    final String rootCAKey = RSAPrivateKeyToPem(keyPair.getPrivate());
+                    keystoreDao.save(CCS_ROOTCA_KEYPAIR, rootCACert, rootCAKey, "");
+                    s_logger.info("No Container Cluster CA stores found, created and saved a keypair with certificate: \n" + rootCACert);
+                } catch (NoSuchProviderException | NoSuchAlgorithmException | CertificateEncodingException | SignatureException | InvalidKeyException | IOException e) {
+                    s_logger.error("Unable to create and save CCS rootCA keypair: " + e.toString());
+                }
+        }
         return true;
+    }
+
+    public X509Certificate generateRootCACertificate(KeyPair keyPair) throws NoSuchAlgorithmException, NoSuchProviderException, CertificateEncodingException, SignatureException, InvalidKeyException {
+        final DateTime now = DateTime.now(DateTimeZone.UTC);
+        final X500Principal dnName = new X500Principal(CCS_ROOTCA_CN);
+        final X509V1CertificateGenerator certGen = new X509V1CertificateGenerator();
+        certGen.setSerialNumber(BigInteger.valueOf(System.currentTimeMillis()));
+        certGen.setSubjectDN(dnName);
+        certGen.setIssuerDN(dnName);
+        certGen.setNotBefore(now.minusDays(1).toDate());
+        certGen.setNotAfter(now.plusYears(50).toDate());
+        certGen.setPublicKey(keyPair.getPublic());
+        certGen.setSignatureAlgorithm("SHA256WithRSAEncryption");
+        return certGen.generate(keyPair.getPrivate(), "BC");
+    }
+
+    public X509Certificate generateClientCertificate(final KeyPair keyPair, final String publicIPAddress) throws IOException, CertificateParsingException, InvalidKeyException, NoSuchAlgorithmException, CertificateEncodingException, NoSuchProviderException, SignatureException, InvalidKeySpecException {
+        final KeystoreVO rootCA = keystoreDao.findByName(CCS_ROOTCA_KEYPAIR);
+        final PrivateKey rootCAPrivateKey = PemToRSAPrivateKey(rootCA.getKey());
+        final X509Certificate rootCACert = PemToX509Cert(rootCA.getCertificate());
+
+        final DateTime now = DateTime.now(DateTimeZone.UTC);
+        final X509V3CertificateGenerator certGen = new X509V3CertificateGenerator();;
+        certGen.setSerialNumber(BigInteger.valueOf(System.currentTimeMillis()));
+        certGen.setIssuerDN(new X500Principal(CCS_ROOTCA_CN));
+        certGen.setSubjectDN(new X500Principal(CCS_CLUSTER_CN));
+        certGen.setNotBefore(now.minusDays(1).toDate());
+        certGen.setNotAfter(now.plusYears(10).toDate());
+        certGen.setPublicKey(keyPair.getPublic());
+        certGen.setSignatureAlgorithm("SHA256WithRSAEncryption");
+        certGen.addExtension(X509Extensions.AuthorityKeyIdentifier, false,
+                new AuthorityKeyIdentifierStructure(rootCACert));
+        certGen.addExtension(X509Extensions.SubjectKeyIdentifier, false,
+                new SubjectKeyIdentifierStructure(keyPair.getPublic()));
+        final List<ASN1Encodable> subjectAlternativeNames = new ArrayList<ASN1Encodable>();
+        subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, publicIPAddress));
+        final DERSequence subjectAlternativeNamesExtension = new DERSequence(
+                subjectAlternativeNames.toArray(new ASN1Encodable[subjectAlternativeNames.size()]));
+        certGen.addExtension(X509Extensions.SubjectAlternativeName, false,
+                subjectAlternativeNamesExtension);
+
+        return certGen.generate(rootCAPrivateKey, "BC");
+    }
+
+    public KeyPair generateRandomKeyPair() throws NoSuchProviderException, NoSuchAlgorithmException {
+        Security.addProvider(new BouncyCastleProvider());
+        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA", "BC");
+        keyPairGenerator.initialize(2048, new SecureRandom());
+        return keyPairGenerator.generateKeyPair();
+    }
+
+    public KeyFactory getKeyFactory() {
+        KeyFactory keyFactory = null;
+        try {
+            Security.addProvider(new BouncyCastleProvider());
+            keyFactory = KeyFactory.getInstance("RSA", "BC");
+        } catch (NoSuchAlgorithmException | NoSuchProviderException e) {
+            s_logger.error("Unable to create KeyFactory:" + e.getMessage());
+        }
+        return keyFactory;
+    }
+
+    public String PrivateKeyToString(PrivateKey key) {
+        try {
+            KeyFactory keyFactory = getKeyFactory();
+            if (keyFactory == null) return null;
+            PKCS8EncodedKeySpec spec = keyFactory.getKeySpec(key,
+                    PKCS8EncodedKeySpec.class);
+            return new String(org.bouncycastle.util.encoders.Base64.encode(spec.getEncoded()));
+        } catch (InvalidKeySpecException e) {
+            s_logger.error("Unable to create KeyFactory:" + e.getMessage());
+        }
+        return null;
+    }
+
+    public PrivateKey StringToPrivateKey(String privateKey) {
+        byte[] sigBytes = org.bouncycastle.util.encoders.Base64.decode(privateKey);
+        PKCS8EncodedKeySpec pkscs8KeySpec = new PKCS8EncodedKeySpec(sigBytes);
+        KeyFactory keyFact = getKeyFactory();
+        if (keyFact == null)
+            return null;
+        try {
+            return keyFact.generatePrivate(pkscs8KeySpec);
+        } catch (InvalidKeySpecException e) {
+            s_logger.error("Unable to create PrivateKey from privateKey string:" + e.getMessage());
+        }
+        return null;
+    }
+
+    public X509Certificate PemToX509Cert(final String pem) throws IOException {
+        final PEMReader pr = new PEMReader(new StringReader(pem));
+        return (X509Certificate) pr.readObject();
+    }
+
+    public String X509CertificateToPem(final X509Certificate cert) throws IOException {
+        final StringWriter sw = new StringWriter();
+        try (final PEMWriter pw = new PEMWriter(sw)) {
+            pw.writeObject(cert);
+        }
+        return sw.toString();
+    }
+
+    public PrivateKey PemToRSAPrivateKey(final String pem) throws InvalidKeySpecException, IOException {
+        final PEMReader pr = new PEMReader(new StringReader(pem));
+        final PemObject pemObject = pr.readPemObject();
+        final KeyFactory keyFactory = getKeyFactory();
+        return keyFactory.generatePrivate(new PKCS8EncodedKeySpec(pemObject.getContent()));
+    }
+
+    public String RSAPrivateKeyToPem(final PrivateKey key) throws IOException {
+        final PemObject pemObject = new PemObject(CCS_RSA_PRIVATE_KEY, key.getEncoded());
+        final StringWriter sw = new StringWriter();
+        try (final PEMWriter pw = new PEMWriter(sw)) {
+            pw.writeObject(pemObject);
+        }
+        return sw.toString();
     }
 }
