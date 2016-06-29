@@ -37,7 +37,7 @@
                             zonename: {
                                 label: 'label.zone.name'
                             },
-                            clustersize : {
+                            size : {
                                 label: 'label.size'
                             },
                             cpunumber: {
@@ -230,6 +230,44 @@
                                                     }
                                                 });
                                             }
+                                        },
+                                        supportPrivateRegistry: {
+                                            label: 'Private Registry',
+                                            isBoolean: true,
+                                            isChecked: false,
+                                        },
+                                        username: {
+                                            label: 'label.username',
+                                            dependsOn: 'supportPrivateRegistry',
+                                            validation: {
+                                                required: true
+                                            },
+                                            isHidden: true
+                                        },
+                                        password: {
+                                            label: 'label.password',
+                                            dependsOn: 'supportPrivateRegistry',
+                                            validation: {
+                                                required: true
+                                            },
+                                            isHidden: true,
+                                            isPassword: true
+                                        },
+                                        url: {
+                                            label: 'label.url',
+                                            dependsOn: 'supportPrivateRegistry',
+                                            validation: {
+                                                required: true
+                                            },
+                                            isHidden: true,
+                                        },
+                                        email: {
+                                            label: 'label.email',
+                                            dependsOn: 'supportPrivateRegistry',
+                                            validation: {
+                                                required: true
+                                            },
+                                            isHidden: true,
                                         }
                                     }
                                 },
@@ -241,7 +279,11 @@
                                         zoneid: args.data.zone,
                                         serviceofferingid: args.data.serviceoffering,
                                         size: args.data.size,
-                                        keypair: args.data.sshkeypair
+                                        keypair: args.data.sshkeypair,
+                                        dockerregistryusername: args.data.username,
+                                        dockerregistrypassword: args.data.password,
+                                        dockerregistryurl: args.data.url,
+                                        dockerregistryemail: args.data.email
                                     };
                                     if (args.data.network != null && args.data.network.length > 0) {
                                         $.extend(data, {
@@ -436,7 +478,7 @@
                                         zonename: {
                                             label: 'label.zone.name'
                                         },
-                                        clustersize : {
+                                        size : {
                                             label: 'Cluster Size'
                                         },
                                         cpunumber: {

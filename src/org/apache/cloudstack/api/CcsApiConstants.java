@@ -14,9 +14,13 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+
 package org.apache.cloudstack.api;
 
-public class CcpApiConstants {
+public class CcsApiConstants {
     public static final String CONSOLE_END_POINT = "consoleendpoint";
+    public static final String DOCKER_REGISTRY_USER_NAME = "dockerregistryusername";
+    public static final String DOCKER_REGISTRY_PASSWORD = "dockerregistrypassword";
+    public static final String DOCKER_REGISTRY_URL = "dockerregistryurl";
+    public static final String DOCKER_REGISTRY_EMAIL = "dockerregistryemail";
 }
-

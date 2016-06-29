@@ -53,6 +53,38 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
         this.clusterId = clusterId;
     }
 
+    public String getRegistryUsername() {
+        return registryUsername;
+    }
+
+    public void setRegistryUsername(String registryUsername) {
+        this.registryUsername = registryUsername;
+    }
+
+    public String getRegistryPassword() {
+        return registryPassword;
+    }
+
+    public void setRegistryPassword(String registryPassword) {
+        this.registryPassword = registryPassword;
+    }
+
+    public String getRegistryUrl() {
+        return registryUrl;
+    }
+
+    public void setRegistryUrl(String registryUrl) {
+        this.registryUrl = registryUrl;
+    }
+
+    public String getRegistryEmail() {
+        return registryEmail;
+    }
+
+    public void setRegistryEmail(String registryEmail) {
+        this.registryEmail = registryEmail;
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -61,11 +93,31 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
     @Column(name = "cluster_id")
     long clusterId;
 
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
     @Column(name = "username")
     String username;
 
     @Column(name = "password")
     String password;
+
+    @Column(name = "registry_username")
+    String registryUsername;
+
+    @Column(name = "registry_password")
+    String registryPassword;
+
+    @Column(name = "registry_url")
+    String registryUrl;
+
+    @Column(name = "registry_email")
+    String registryEmail;
 
     public ContainerClusterDetailsVO() {
 

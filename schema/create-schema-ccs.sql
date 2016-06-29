@@ -45,6 +45,10 @@ CREATE TABLE IF NOT EXISTS `cloud`.`sb_ccs_container_cluster_details` (
     `cluster_id` bigint unsigned NOT NULL COMMENT 'cluster id',
     `username` varchar(255) NOT NULL,
     `password` varchar(255) NOT NULL,
+    `registry_username` varchar(255),
+    `registry_password` varchar(255),
+    `registry_url` varchar(255),
+    `registry_email` varchar(255),
 
     PRIMARY KEY(`id`),
     CONSTRAINT `container_cluster_details_cluster__id` FOREIGN KEY `container_cluster_details_cluster__id`(`cluster_id`) REFERENCES `sb_ccs_container_cluster`(`id`) ON DELETE CASCADE

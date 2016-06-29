@@ -130,7 +130,9 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.MalformedURLException;
 import java.net.Socket;
+import java.net.URL;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -138,6 +140,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 import java.security.SecureRandom;
 import com.cloud.utils.concurrency.NamedThreadFactory;
 import java.util.concurrent.Executors;
@@ -234,7 +238,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                                                    final Account owner,
                                                    final Long networkId,
                                                    final String sshKeyPair,
-                                                   final Long clusterSize)
+                                                   final Long clusterSize,
+                                                   final String dockerRegistryUserName,
+                                                   final String dockerRegistryPassword,
+                                                   final String dockerRegistryUrl,
+                                                   final String dockerRegistryEmail)
             throws InsufficientCapacityException, ResourceAllocationException, ManagementServerException {
 
         if (name == null || name.isEmpty()) {
@@ -281,6 +289,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             throw new InvalidParameterValueException("This service offering is not suitable for k8s cluster, service offering id is " + networkId);
         }
 
+        validateDockerRegistryParams(dockerRegistryUserName, dockerRegistryPassword, dockerRegistryUrl, dockerRegistryEmail);
+
         plan(clusterSize, zoneId, _srvOfferingDao.findById(serviceOfferingId));
 
         Network network = null;
@@ -324,7 +334,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         final long cores = serviceOffering.getCpu() * clusterSize;
         final long memory = serviceOffering.getRamSize() * clusterSize;
 
-        ContainerClusterVO cluster = Transaction.execute(new TransactionCallback<ContainerClusterVO>() {
+        final ContainerClusterVO cluster = Transaction.execute(new TransactionCallback<ContainerClusterVO>() {
             @Override
             public ContainerClusterVO doInTransaction(TransactionStatus status) {
                 ContainerClusterVO newCluster = new ContainerClusterVO(name, displayName, zoneId,
@@ -332,6 +342,24 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                         owner.getAccountId(), clusterSize, ContainerCluster.State.Created, sshKeyPair, cores, memory, "", "");
                 _containerClusterDao.persist(newCluster);
                 return newCluster;
+            }
+        });
+
+        Transaction.execute(new TransactionCallback<ContainerClusterDetailsVO>() {
+            @Override
+            public ContainerClusterDetailsVO doInTransaction(TransactionStatus status) {
+                ContainerClusterDetailsVO clusterDetails = new ContainerClusterDetailsVO();
+                clusterDetails.setClusterId(cluster.getId());
+                clusterDetails.setRegistryUsername(dockerRegistryUserName);
+                clusterDetails.setRegistryPassword(dockerRegistryPassword);
+                clusterDetails.setRegistryUrl(dockerRegistryUrl);
+                clusterDetails.setRegistryEmail(dockerRegistryEmail);
+                clusterDetails.setUsername("admin");
+                SecureRandom random = new SecureRandom();
+                String randomPassword = new BigInteger(130, random).toString(32);
+                clusterDetails.setPassword(randomPassword);
+                _containerClusterDetailsDao.persist(clusterDetails);
+                return clusterDetails;
             }
         });
 
@@ -735,6 +763,39 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return true;
     }
 
+    private void validateDockerRegistryParams(final String dockerRegistryUserName,
+                                                 final String dockerRegistryPassword,
+                                                 final String dockerRegistryUrl,
+                                                 final String dockerRegistryEmail) {
+        // if no params related to docker registry specified then nothing to validate so return true
+        if ((dockerRegistryUserName == null || dockerRegistryUserName.isEmpty()) &&
+                (dockerRegistryPassword == null || dockerRegistryPassword.isEmpty())  &&
+                (dockerRegistryUrl == null || dockerRegistryUrl.isEmpty()) &&
+                (dockerRegistryEmail == null || dockerRegistryEmail.isEmpty())) {
+            return;
+        }
+
+        // all params related to docker registry must be specified or nothing
+        if (!((dockerRegistryUserName != null && !dockerRegistryUserName.isEmpty()) &&
+                (dockerRegistryPassword != null && !dockerRegistryPassword.isEmpty()) &&
+                (dockerRegistryUrl != null && !dockerRegistryUrl.isEmpty()) &&
+                (dockerRegistryEmail != null && !dockerRegistryEmail.isEmpty()))) {
+            throw new InvalidParameterValueException("All the docker private registry parameters (username, password, url, email) required are specified");
+        }
+
+        try {
+            URL url = new URL(dockerRegistryUrl);
+        } catch (MalformedURLException e) {
+            throw new InvalidParameterValueException("Invalid docker registry url specified");
+        }
+
+        Pattern VALID_EMAIL_ADDRESS_REGEX = Pattern.compile("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,6}$", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = VALID_EMAIL_ADDRESS_REGEX .matcher(dockerRegistryEmail);
+        if (!matcher.find()) {
+            throw new InvalidParameterValueException("Invalid docker registry email specified");
+        }
+    }
+
     public DeployDestination plan(final long clusterSize, final long dcId, final ServiceOffering offering) throws InsufficientServerCapacityException {
         final int cpu_requested = offering.getCpu() * offering.getSpeed();
         final long ram_requested = offering.getRamSize() * 1024L * 1024L;
@@ -1034,23 +1095,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         try {
             String masterCloudConfig = _globalConfigDao.getValue(CcsConfig.ContainerClusterMasterCloudConfig.key());
             k8sMasterConfig = readFile(masterCloudConfig);
-            SecureRandom random = new SecureRandom();
-            final String randomPassword = new BigInteger(130, random).toString(32);
+            ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
             final String password = "{{ k8s_master.password }}";
             final String user = "{{ k8s_master.user }}";
-            k8sMasterConfig = k8sMasterConfig.replace(password, randomPassword);
-            k8sMasterConfig = k8sMasterConfig.replace(user, "admin");
-
-            ContainerClusterDetailsVO cluster = Transaction.execute(new TransactionCallback<ContainerClusterDetailsVO>() {
-
-                @Override
-                public ContainerClusterDetailsVO doInTransaction(TransactionStatus status) {
-                    ContainerClusterDetailsVO clusterDetails = new ContainerClusterDetailsVO(containerCluster.getId(),
-                            "admin", randomPassword);
-                    _containerClusterDetailsDao.persist(clusterDetails);
-                return clusterDetails;
-                }
-            });
+            k8sMasterConfig = k8sMasterConfig.replace(password, clusterDetails.getPassword());
+            k8sMasterConfig = k8sMasterConfig.replace(user, clusterDetails.getUserName());
         } catch (RuntimeException e ) {
             s_logger.error("Failed to read kubernetes master configuration file due to " + e);
             throw new ManagementServerException("Failed to read kubernetes master configuration file", e);
@@ -1103,6 +1152,39 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             k8sNodeConfig = readFile(nodeCloudConfig).toString();
             String masterIPString = "{{ k8s_master.default_ip }}";
             k8sNodeConfig = k8sNodeConfig.replace(masterIPString, masterIp);
+
+            ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
+
+            /* genarate /.docker/config.json file on the nodes only if container cluster is created to
+             * use docker private registry */
+            String dockerUserName = clusterDetails.getRegistryUsername();
+            String dockerPassword = clusterDetails.getRegistryPassword();
+            if (dockerUserName != null && !dockerUserName.isEmpty() && dockerPassword != null && !dockerPassword.isEmpty()) {
+                // do write file for  /.docker/config.json through the code instead of k8s-node.yml as we can no make a section
+                // optional or conditionally applied
+                String dockerConfigString = "write-files:\n" +
+                        "  - path: /.docker/config.json\n" +
+                        "    owner: core:core\n" +
+                        "    permissions: '0644'\n" +
+                        "    content: |\n" +
+                        "      {\n" +
+                        "        \"auths\": {\n" +
+                        "          {{docker.url}}: {\n" +
+                        "            \"auth\": {{docker.secret}},\n" +
+                        "            \"email\": {{docker.email}}\n" +
+                        "          }\n" +
+                        "         }\n" +
+                        "      }";
+                k8sNodeConfig = k8sNodeConfig.replace("write-files:", dockerConfigString);
+                String dockerUrl = "{{docker.url}}";
+                String dockerAuth = "{{docker.secret}}";
+                String dockerEmail = "{{docker.email}}";
+                String usernamePassword = dockerUserName + ":" + dockerPassword;
+                String base64Auth = Base64.encodeBase64String(usernamePassword.getBytes(Charset.forName("UTF-8")));
+                k8sNodeConfig = k8sNodeConfig.replace(dockerUrl, "\"" + clusterDetails.getRegistryUrl() + "\"");
+                k8sNodeConfig = k8sNodeConfig.replace(dockerAuth, "\"" + base64Auth + "\"");
+                k8sNodeConfig = k8sNodeConfig.replace(dockerEmail, "\"" + clusterDetails.getRegistryEmail() + "\"");
+            }
         } catch (RuntimeException e ) {
             s_logger.warn("Failed to read node configuration file due to " + e );
             throw new ManagementServerException("Failed to read cluster node configuration file.", e);
