@@ -193,7 +193,7 @@ coreos:
         ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-controller-manager
         ExecStart=/opt/bin/kube-controller-manager \
         --service-account-private-key-file=/opt/bin/kube-serviceaccount.key \
-        --root-ca-file=/var/run/kubernetes/apiserver.crt \
+        --root-ca-file=/opt/bin/kube-apiserver.crt \
         --master=127.0.0.1:8080 \
         --logtostderr=true
         Restart=always
