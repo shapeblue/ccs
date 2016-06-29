@@ -610,6 +610,10 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
             final UserVmVO vm = _userVmDao.findById(vmMapVO.getVmId());
             try {
+                if (vm == null) {
+                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                    throw new ManagementServerException("Failed to start all VMs in container cluster id: " + containerClusterId);
+                }
                 startK8SVM(vm, containerCluster);
             } catch (ServerApiException ex) {
                 s_logger.warn("Failed to start VM in container cluster id:" + containerClusterId + " due to " + ex);
@@ -619,7 +623,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
             final UserVmVO vm = _userVmDao.findById(vmMapVO.getVmId());
-            if (!vm.getState().equals(VirtualMachine.State.Running)) {
+            if (vm == null || !vm.getState().equals(VirtualMachine.State.Running)) {
                 stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
                 throw new ManagementServerException("Failed to start all VMs in container cluster id: " + containerClusterId);
             }
@@ -895,16 +899,22 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         stateTransitTo(containerClusterId, ContainerCluster.Event.StopRequested);
 
         for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
+            final UserVmVO vm = _userVmDao.findById(vmMapVO.getVmId());
             try {
+                if (vm == null) {
+                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                    throw new ManagementServerException("Failed to start all VMs in container cluster id: " + containerClusterId);
+                }
                 stopK8SVM(vmMapVO);
             } catch (ServerApiException ex) {
                 s_logger.warn("Failed to stop VM in container cluster id:" + containerClusterId + " due to " + ex);
+                // dont bail out here. proceed further to stop the reset of the VM's
             }
         }
 
         for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
             final UserVmVO vm = _userVmDao.findById(vmMapVO.getVmId());
-            if (!vm.getState().equals(VirtualMachine.State.Stopped)) {
+            if (vm == null || !vm.getState().equals(VirtualMachine.State.Stopped)) {
                 stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
                 throw new ManagementServerException("Failed to stop all VMs in container cluster id: " + containerClusterId);
             }
