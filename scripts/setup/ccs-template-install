@@ -19,6 +19,10 @@ def checkUrl(url):
     except:
         return False
 
+def getFileContent(file):
+    with open(file, 'r') as dfile:
+        data=dfile.read().strip()
+    return data
 
 class SignedAPICall(object):
 
@@ -79,7 +83,7 @@ class CloudStack(SignedAPICall):
         return json.loads(data)[key]
 
 
-usage = """ccs-template-install -h hypervisor [ -u url ] -e -z zoneid
+usage = """ccs-template-install -h hypervisor [ -u url ] -e -z zoneid [ -a apifile ] [ -k keyfile ] [ -s secretfile]
 
 Registers a template of the given format and for the given hypervisor available at specified url with CloudStack. If template at url is extractable set --extractable to true"""
 
@@ -88,6 +92,9 @@ parser.add_argument("-m", "--hypervisor", dest="hypervisor", help="Hypervisor ty
 parser.add_argument("-u", "--url", help="A valid url at which template is available", required=False)
 parser.add_argument("-e", "--extractable", action="store_true", dest="extractable", help="if template is extractable", default=False)
 parser.add_argument("-z", "--zoneid", help="zoneid in which template is to be installed", required=True)
+parser.add_argument("-a", "--apifile", help="A readable text file containing API url", required=False)
+parser.add_argument("-k", "--keyfile", help="A readable text file containing API key", required=False)
+parser.add_argument("-s", "--secretfile", help="A readable text file containing API secret key", required=False)
 
 args = parser.parse_args()
 
@@ -121,16 +128,27 @@ except:
     print "zone id is not a valid uuid"
     exit(1)
 
+if args.apifile is None:
+    api_url = raw_input("API url:")
+else:
+    api_url=getFileContent(args.apifile)
 
+if args.keyfile is None:
+    api_key = getpass.getpass("API Key:")
+else:
+    api_key=getFileContent(args.keyfile)
+
+if args.secretfile is None:
+    secret_key = getpass.getpass("Secret:")
+else:
+    secret_key=getFileContent(args.secretfile)
 
 name = 'ShapeBlue-CCS-Template'
 displaytext = 'ShapeBlue-CCS-Template'
 
 request = {'name': name, 'displaytext': displaytext, 'format': format, 'hypervisor': args.hypervisor, 'ostypeid': '255', 'url': args.url, 'zoneid': args.zoneid, 'isextractable': args.extractable, 'ispublic':'true', 'isfeatured':'true'}
 
-api_url = raw_input("API url:")
-api_key = getpass.getpass("API Key:")
-secret_key = getpass.getpass("Secret:")
+exit
 
 api = CloudStack(api_url, api_key, secret_key)
 try:
