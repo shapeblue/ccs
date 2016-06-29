@@ -146,13 +146,18 @@ else:
 name = 'ShapeBlue-CCS-Template'
 displaytext = 'ShapeBlue-CCS-Template'
 
-request = {'name': name, 'displaytext': displaytext, 'format': format, 'hypervisor': args.hypervisor, 'ostypeid': '255', 'url': args.url, 'zoneid': args.zoneid, 'isextractable': args.extractable, 'ispublic':'true', 'isfeatured':'true'}
-
-exit
-
 api = CloudStack(api_url, api_key, secret_key)
 try:
-    result = api.registerTemplate(request)
+    request = {}
+    zone_result = api.listZones(request)
+    for count in range(0, zone_result["count"]):
+        try:
+            zoneid = zone_result["zone"][count]["id"]
+            request = {'name': name, 'displaytext': displaytext, 'format': format, 'hypervisor': args.hypervisor, 'ostypeid': '255', 'url': args.url, 'zoneid': zoneid, 'isextractable': args.extractable, 'ispublic':'true', 'isfeatured':'true'}
+            result = api.registerTemplate(request)
+        except:
+            continue
+        
     print "Template for ShapeBlue CloudStack Container Service is successfully installed"
 except Exception as e:
     print "Failed to register template for ShapeBlue CloudStack Container Service due to :" + str(e)
