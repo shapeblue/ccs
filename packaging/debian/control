@@ -8,6 +8,6 @@ Homepage: http://packages.shapeblue.com/
 
 Package: cloudstack-ccs
 Architecture: all
-Depends: cloudstack-management
+Depends: cloudstack-management (>= 4.5.0)
 Description: CloudStack Container Service Plugin
  The CloudStack Container Service plugin from ShapeBlue

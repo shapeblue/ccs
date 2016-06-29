@@ -18,7 +18,6 @@ package com.cloud.containercluster.dao;
 
 import com.cloud.utils.db.SearchBuilder;
 import com.cloud.utils.db.SearchCriteria;
-import com.cloud.utils.db.SearchCriteria.Op;
 
 import org.springframework.stereotype.Component;
 
@@ -27,7 +26,6 @@ import com.cloud.containercluster.ContainerClusterVO;
 import com.cloud.utils.db.GenericDaoBase;
 import com.cloud.utils.db.TransactionLegacy;
 import com.cloud.containercluster.ContainerCluster;
-import com.cloud.utils.db.QueryBuilder;
 
 import java.util.List;
 
@@ -37,6 +35,7 @@ public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, 
     private final SearchBuilder<ContainerClusterVO> AccountIdSearch;
     private final SearchBuilder<ContainerClusterVO> GarbageCollectedSearch;
     private final SearchBuilder<ContainerClusterVO> StateSearch;
+    private final SearchBuilder<ContainerClusterVO> SameNetworkSearch;
 
     public ContainerClusterDaoImpl() {
         AccountIdSearch = createSearchBuilder();
@@ -51,6 +50,10 @@ public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, 
         StateSearch = createSearchBuilder();
         StateSearch.and("state", StateSearch.entity().getState(), SearchCriteria.Op.EQ);
         StateSearch.done();
+
+        SameNetworkSearch = createSearchBuilder();
+        SameNetworkSearch.and("network_id", SameNetworkSearch.entity().getNetworkId(), SearchCriteria.Op.EQ);
+        SameNetworkSearch.done();
     }
 
     @Override
@@ -76,9 +79,8 @@ public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, 
     }
 
     @Override
-    public boolean updateState(com.cloud.containercluster.ContainerCluster.State currentState, Event event,
-                               com.cloud.containercluster.ContainerCluster.State nextState,
-                               ContainerCluster vo, Object data) {
+    public boolean updateState(com.cloud.containercluster.ContainerCluster.State currentState, Event event, com.cloud.containercluster.ContainerCluster.State nextState,
+            ContainerCluster vo, Object data) {
         // TODO: ensure this update is correct
         TransactionLegacy txn = TransactionLegacy.currentTxn();
         txn.start();
@@ -92,8 +94,8 @@ public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, 
     }
 
     public List<ContainerClusterVO> listByNetworkId(long networkId) {
-        QueryBuilder<ContainerClusterVO> sc = QueryBuilder.create(ContainerClusterVO.class);
-        sc.and(sc.entity().getNetworkId(), Op.EQ, networkId);
-        return sc.list();
+        SearchCriteria<ContainerClusterVO> sc = SameNetworkSearch.create();
+        sc.setParameters("network_id", networkId);
+        return this.listIncludingRemovedBy(sc);
     }
 }
