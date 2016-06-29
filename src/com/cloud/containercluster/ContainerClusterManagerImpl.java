@@ -1774,6 +1774,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 new SubjectKeyIdentifierStructure(keyPair.getPublic()));
         final List<ASN1Encodable> subjectAlternativeNames = new ArrayList<ASN1Encodable>();
         subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, publicIPAddress));
+        subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, "10.0.0.1"));
+        subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, "10.1.1.1"));
         final DERSequence subjectAlternativeNamesExtension = new DERSequence(
                 subjectAlternativeNames.toArray(new ASN1Encodable[subjectAlternativeNames.size()]));
         certGen.addExtension(X509Extensions.SubjectAlternativeName, false,
