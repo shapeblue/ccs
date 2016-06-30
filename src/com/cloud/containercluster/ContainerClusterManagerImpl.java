@@ -417,7 +417,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             plan(containerClusterId, containerCluster.getZoneId());
         }
         catch (InsufficientCapacityException e){
-            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
             s_logger.warn("Provisioning the cluster failed due to insufficient capacity in the container cluster: " + containerCluster.getName() + " due to " + e);
             throw new ManagementServerException("Provisioning the cluster failed due to insufficient capacity in the container cluster: " + containerCluster.getName(), e);
         }
