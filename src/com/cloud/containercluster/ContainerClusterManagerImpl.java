@@ -123,6 +123,7 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.log4j.Logger;
 import org.bouncycastle.asn1.ASN1Encodable;
 import org.bouncycastle.asn1.DERSequence;
+import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.GeneralName;
 import org.bouncycastle.asn1.x509.X509Extensions;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -1158,15 +1159,20 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             final String password = "{{ k8s_master.password }}";
             final String apiServerCert = "{{ k8s_master.apiserver.crt }}";
             final String apiServerKey = "{{ k8s_master.apiserver.key }}";
+            final String caCert = "{{ k8s_master.ca.crt }}";
 
+            final KeystoreVO rootCA = keystoreDao.findByName(CCS_ROOTCA_KEYPAIR);
+            final PrivateKey rootCAPrivateKey = PemToRSAPrivateKey(rootCA.getKey());
+            final X509Certificate rootCACert = PemToX509Cert(rootCA.getCertificate());
             final KeyPair keyPair = generateRandomKeyPair();
-            final String tlsClientCert = X509CertificateToPem(generateClientCertificate(keyPair, publicIP.getAddress().addr()));
+            final String tlsClientCert = X509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, publicIP.getAddress().addr(), true)) + rootCA.getCertificate();
             final String tlsPrivateKey = RSAPrivateKeyToPem(keyPair.getPrivate());
 
             k8sMasterConfig = k8sMasterConfig.replace(password, randomPassword);
             k8sMasterConfig = k8sMasterConfig.replace(user, "admin");
             k8sMasterConfig = k8sMasterConfig.replace(apiServerCert, tlsClientCert.replace("\n", "\n      "));
             k8sMasterConfig = k8sMasterConfig.replace(apiServerKey, tlsPrivateKey.replace("\n", "\n      "));
+            k8sMasterConfig = k8sMasterConfig.replace(caCert, rootCA.getCertificate().replace("\n", "\n      "));
 
             ContainerClusterDetailsVO cluster = Transaction.execute(new TransactionCallback<ContainerClusterDetailsVO>() {
 
@@ -1229,7 +1235,21 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             String nodeCloudConfig = _globalConfigDao.getValue(CcsConfig.ContainerClusterNodeCloudConfig.key());
             k8sNodeConfig = readFile(nodeCloudConfig).toString();
             String masterIPString = "{{ k8s_master.default_ip }}";
+            final String clientCert = "{{ k8s_node.client.crt }}";
+            final String clientKey = "{{ k8s_node.client.key }}";
+            final String caCert = "{{ k8s_node.ca.crt }}";
+
+            final KeystoreVO rootCA = keystoreDao.findByName(CCS_ROOTCA_KEYPAIR);
+            final PrivateKey rootCAPrivateKey = PemToRSAPrivateKey(rootCA.getKey());
+            final X509Certificate rootCACert = PemToX509Cert(rootCA.getCertificate());
+            final KeyPair keyPair = generateRandomKeyPair();
+            final String tlsClientCert = X509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, "", false)) + rootCA.getCertificate();
+            final String tlsPrivateKey = RSAPrivateKeyToPem(keyPair.getPrivate());
+
             k8sNodeConfig = k8sNodeConfig.replace(masterIPString, masterIp);
+            k8sNodeConfig = k8sNodeConfig.replace(clientCert, tlsClientCert.replace("\n", "\n      "));
+            k8sNodeConfig = k8sNodeConfig.replace(clientKey, tlsPrivateKey.replace("\n", "\n      "));
+            k8sNodeConfig = k8sNodeConfig.replace(caCert, rootCA.getCertificate().replace("\n", "\n      "));
 
             ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
 
@@ -1754,11 +1774,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return certGen.generate(keyPair.getPrivate(), "BC");
     }
 
-    public X509Certificate generateClientCertificate(final KeyPair keyPair, final String publicIPAddress) throws IOException, CertificateParsingException, InvalidKeyException, NoSuchAlgorithmException, CertificateEncodingException, NoSuchProviderException, SignatureException, InvalidKeySpecException {
-        final KeystoreVO rootCA = keystoreDao.findByName(CCS_ROOTCA_KEYPAIR);
-        final PrivateKey rootCAPrivateKey = PemToRSAPrivateKey(rootCA.getKey());
-        final X509Certificate rootCACert = PemToX509Cert(rootCA.getCertificate());
-
+    public X509Certificate generateClientCertificate(final PrivateKey rootCAPrivateKey, final X509Certificate rootCACert,
+                                                     final KeyPair keyPair, final String publicIPAddress, final boolean isMasterNode) throws IOException, CertificateParsingException, InvalidKeyException, NoSuchAlgorithmException, CertificateEncodingException, NoSuchProviderException, SignatureException, InvalidKeySpecException {
         final DateTime now = DateTime.now(DateTimeZone.UTC);
         final X509V3CertificateGenerator certGen = new X509V3CertificateGenerator();;
         certGen.setSerialNumber(BigInteger.valueOf(System.currentTimeMillis()));
@@ -1772,14 +1789,25 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 new AuthorityKeyIdentifierStructure(rootCACert));
         certGen.addExtension(X509Extensions.SubjectKeyIdentifier, false,
                 new SubjectKeyIdentifierStructure(keyPair.getPublic()));
-        final List<ASN1Encodable> subjectAlternativeNames = new ArrayList<ASN1Encodable>();
-        subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, publicIPAddress));
-        subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, "10.0.0.1"));
-        subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, "10.1.1.1"));
-        final DERSequence subjectAlternativeNamesExtension = new DERSequence(
-                subjectAlternativeNames.toArray(new ASN1Encodable[subjectAlternativeNames.size()]));
-        certGen.addExtension(X509Extensions.SubjectAlternativeName, false,
-                subjectAlternativeNamesExtension);
+
+        if (isMasterNode) {
+            certGen.addExtension(X509Extensions.BasicConstraints, false,
+                    new BasicConstraints(true));
+
+            final List<ASN1Encodable> subjectAlternativeNames = new ArrayList<ASN1Encodable>();
+            subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, publicIPAddress));
+            subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, "10.0.0.1"));
+            subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, "10.1.1.1"));
+            subjectAlternativeNames.add(new GeneralName(GeneralName.dNSName, "kubernetes"));
+            subjectAlternativeNames.add(new GeneralName(GeneralName.dNSName, "kubernetes.default"));
+            subjectAlternativeNames.add(new GeneralName(GeneralName.dNSName, "kubernetes.default.svc"));
+            subjectAlternativeNames.add(new GeneralName(GeneralName.dNSName, "kubernetes.default.svc.cluster.local"));
+
+            final DERSequence subjectAlternativeNamesExtension = new DERSequence(
+                    subjectAlternativeNames.toArray(new ASN1Encodable[subjectAlternativeNames.size()]));
+            certGen.addExtension(X509Extensions.SubjectAlternativeName, false,
+                    subjectAlternativeNamesExtension);
+        }
 
         return certGen.generate(rootCAPrivateKey, "BC");
     }
