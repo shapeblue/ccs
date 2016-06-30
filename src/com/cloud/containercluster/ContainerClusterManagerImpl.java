@@ -414,7 +414,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         final DeployDestination dest = null;
         try {
-            plan(containerClusterId, containerCluster.getZoneId());
+            dest = plan(containerClusterId, containerCluster.getZoneId());
         }
         catch (InsufficientCapacityException e){
             stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
