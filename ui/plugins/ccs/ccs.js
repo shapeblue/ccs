@@ -1,5 +1,6 @@
 (function (cloudStack) {
 
+    var rootCaCert = "";
     cloudStack.plugins.ccs = function(plugin) {
         plugin.ui.addSection({
             id: 'ccs',
@@ -88,9 +89,52 @@
 
                         // List view actions
                         actions: {
+                            showCACert: {
+                                label: 'Cluster Root CA Certificate',
+                                isHeader: true,
+                                messages: {
+                                    notification: function(args) {
+                                        return 'Cluster Root CA Certificate';
+                                    }
+                                },
+                                createForm: {
+                                    title: 'Cluster Root CA Certificate',
+                                    fields: {
+                                        certificate: {
+                                            label: 'label.certificate',
+                                            isTextarea: true,
+                                            defaultValue: function(args) {
+                                                $.ajax({
+                                                    url: createURL("listContainerClusterCACert"),
+                                                    dataType: "json",
+                                                    async: false,
+                                                    success: function(json) {
+                                                        rootCaCert = json.listcontainerclustercacertresponse.rootcacert.certificate;
+                                                    }
+                                                });
+                                                return rootCaCert;
+                                            }
+                                        }
+                                    }
+                                },
+                                action: function(args) {
+                                    var blob = new Blob([rootCaCert], {type: 'application/x-x509-ca-cert'});
+                                    var filename = "cloudstack-containerservice.pem";
+                                    if(window.navigator.msSaveOrOpenBlob) {
+                                        window.navigator.msSaveBlob(blob, filename);
+                                    } else{
+                                        var elem = window.document.createElement('a');
+                                        elem.href = window.URL.createObjectURL(blob);
+                                        elem.download = filename;
+                                        document.body.appendChild(elem)
+                                        elem.click();
+                                        document.body.removeChild(elem);
+                                    }
+                                    args.response.success({});
+                                },
+                            },
                             add: {
                                 label: 'Add container cluster',
-
                                 createForm: {
                                     title: 'Add container cluster',
                                     preFilter: cloudStack.preFilter.createTemplate,
@@ -279,12 +323,18 @@
                                         zoneid: args.data.zone,
                                         serviceofferingid: args.data.serviceoffering,
                                         size: args.data.size,
-                                        keypair: args.data.sshkeypair,
-                                        dockerregistryusername: args.data.username,
-                                        dockerregistrypassword: args.data.password,
-                                        dockerregistryurl: args.data.url,
-                                        dockerregistryemail: args.data.email
+                                        keypair: args.data.sshkeypair
                                     };
+
+                                    if (args.data.supportPrivateRegistry) {
+                                        $.extend(data, {
+                                            dockerregistryusername: args.data.username,
+                                            dockerregistrypassword: args.data.password,
+                                            dockerregistryurl: args.data.url,
+                                            dockerregistryemail: args.data.email
+                                        });
+                                    }
+
                                     if (args.data.network != null && args.data.network.length > 0) {
                                         $.extend(data, {
                                             networkid: args.data.network

@@ -106,6 +106,7 @@ import org.apache.cloudstack.api.BaseCmd;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.command.user.containercluster.CreateContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.DeleteContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCACertCmd;
 import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.StartContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.StopContainerClusterCmd;
@@ -1562,6 +1563,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         cmdList.add(StopContainerClusterCmd.class);
         cmdList.add(DeleteContainerClusterCmd.class);
         cmdList.add(ListContainerClusterCmd.class);
+        cmdList.add(ListContainerClusterCACertCmd.class);
         return cmdList;
     }
 
