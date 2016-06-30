@@ -124,7 +124,6 @@ import org.apache.commons.codec.binary.Base64;
 import org.apache.log4j.Logger;
 import org.bouncycastle.asn1.ASN1Encodable;
 import org.bouncycastle.asn1.DERSequence;
-import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.GeneralName;
 import org.bouncycastle.asn1.x509.X509Extensions;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -1166,7 +1165,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             final PrivateKey rootCAPrivateKey = PemToRSAPrivateKey(rootCA.getKey());
             final X509Certificate rootCACert = PemToX509Cert(rootCA.getCertificate());
             final KeyPair keyPair = generateRandomKeyPair();
-            final String tlsClientCert = X509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, publicIP.getAddress().addr(), true)) + rootCA.getCertificate();
+            final String tlsClientCert = X509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, publicIP.getAddress().addr(), true));
             final String tlsPrivateKey = RSAPrivateKeyToPem(keyPair.getPrivate());
 
             k8sMasterConfig = k8sMasterConfig.replace(password, randomPassword);
@@ -1244,7 +1243,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             final PrivateKey rootCAPrivateKey = PemToRSAPrivateKey(rootCA.getKey());
             final X509Certificate rootCACert = PemToX509Cert(rootCA.getCertificate());
             final KeyPair keyPair = generateRandomKeyPair();
-            final String tlsClientCert = X509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, "", false)) + rootCA.getCertificate();
+            final String tlsClientCert = X509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, "", false));
             final String tlsPrivateKey = RSAPrivateKeyToPem(keyPair.getPrivate());
 
             k8sNodeConfig = k8sNodeConfig.replace(masterIPString, masterIp);
@@ -1793,9 +1792,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 new SubjectKeyIdentifierStructure(keyPair.getPublic()));
 
         if (isMasterNode) {
-            certGen.addExtension(X509Extensions.BasicConstraints, false,
-                    new BasicConstraints(true));
-
             final List<ASN1Encodable> subjectAlternativeNames = new ArrayList<ASN1Encodable>();
             subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, publicIPAddress));
             subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, "10.0.0.1"));
