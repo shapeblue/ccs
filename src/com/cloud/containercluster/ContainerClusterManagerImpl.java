@@ -1802,33 +1802,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return keyFactory;
     }
 
-    public String PrivateKeyToString(PrivateKey key) {
-        try {
-            KeyFactory keyFactory = getKeyFactory();
-            if (keyFactory == null) return null;
-            PKCS8EncodedKeySpec spec = keyFactory.getKeySpec(key,
-                    PKCS8EncodedKeySpec.class);
-            return new String(org.bouncycastle.util.encoders.Base64.encode(spec.getEncoded()));
-        } catch (InvalidKeySpecException e) {
-            s_logger.error("Unable to create KeyFactory:" + e.getMessage());
-        }
-        return null;
-    }
-
-    public PrivateKey StringToPrivateKey(String privateKey) {
-        byte[] sigBytes = org.bouncycastle.util.encoders.Base64.decode(privateKey);
-        PKCS8EncodedKeySpec pkscs8KeySpec = new PKCS8EncodedKeySpec(sigBytes);
-        KeyFactory keyFact = getKeyFactory();
-        if (keyFact == null)
-            return null;
-        try {
-            return keyFact.generatePrivate(pkscs8KeySpec);
-        } catch (InvalidKeySpecException e) {
-            s_logger.error("Unable to create PrivateKey from privateKey string:" + e.getMessage());
-        }
-        return null;
-    }
-
     public X509Certificate PemToX509Cert(final String pem) throws IOException {
         final PEMReader pr = new PEMReader(new StringReader(pem));
         return (X509Certificate) pr.readObject();
