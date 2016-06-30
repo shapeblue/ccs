@@ -91,7 +91,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-m", "--hypervisor", dest="hypervisor", help="Hypervisor type", required=True)
 parser.add_argument("-u", "--url", help="A valid url at which template is available", required=False)
 parser.add_argument("-e", "--extractable", action="store_true", dest="extractable", help="if template is extractable", default=False)
-parser.add_argument("-z", "--zoneid", help="zoneid in which template is to be installed", required=True)
 parser.add_argument("-a", "--apifile", help="A readable text file containing API url", required=False)
 parser.add_argument("-k", "--keyfile", help="A readable text file containing API key", required=False)
 parser.add_argument("-s", "--secretfile", help="A readable text file containing API secret key", required=False)
@@ -122,12 +121,6 @@ if args.extractable is True:
 else:
     args.extractable = "false"
 
-try:
-    UUID(args.zoneid, version=4)
-except:
-    print "zone id is not a valid uuid"
-    exit(1)
-
 if args.apifile is None:
     api_url = raw_input("API url:")
 else:
@@ -146,13 +139,18 @@ else:
 name = 'ShapeBlue-CCS-Template'
 displaytext = 'ShapeBlue-CCS-Template'
 
-request = {'name': name, 'displaytext': displaytext, 'format': format, 'hypervisor': args.hypervisor, 'ostypeid': '255', 'url': args.url, 'zoneid': args.zoneid, 'isextractable': args.extractable, 'ispublic':'true', 'isfeatured':'true'}
-
-exit
-
 api = CloudStack(api_url, api_key, secret_key)
 try:
-    result = api.registerTemplate(request)
+    request = {}
+    zone_result = api.listZones(request)
+    for count in range(0, zone_result["count"]):
+        try:
+            zoneid = zone_result["zone"][count]["id"]
+            request = {'name': name, 'displaytext': displaytext, 'format': format, 'hypervisor': args.hypervisor, 'ostypeid': '255', 'url': args.url, 'zoneid': zoneid, 'isextractable': args.extractable, 'ispublic':'true', 'isfeatured':'true'}
+            result = api.registerTemplate(request)
+        except:
+            continue
+        
     print "Template for ShapeBlue CloudStack Container Service is successfully installed"
 except Exception as e:
     print "Failed to register template for ShapeBlue CloudStack Container Service due to :" + str(e)

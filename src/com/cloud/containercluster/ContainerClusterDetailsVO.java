@@ -85,6 +85,14 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
         this.registryEmail = registryEmail;
     }
 
+    public boolean getNetworkCleanup() {
+        return networkCleanup;
+    }
+
+    public void setNetworkCleanup(boolean networkCleanup) {
+        this.networkCleanup = networkCleanup;
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -118,6 +126,9 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
 
     @Column(name = "registry_email")
     String registryEmail;
+
+    @Column(name = "network_cleanup")
+    boolean networkCleanup;
 
     public ContainerClusterDetailsVO() {
 

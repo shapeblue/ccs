@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS `cloud`.`sb_ccs_container_cluster` (
     `zone_id` bigint unsigned NOT NULL COMMENT 'zone id',
     `service_offering_id` bigint unsigned COMMENT 'service offering id for the cluster VM',
     `template_id` bigint unsigned COMMENT 'vm_template.id',
-    `network_id` bigint unsigned COMMENT 'network this public ip address is associated with',
+    `network_id` bigint unsigned COMMENT 'network this container cluster uses',
     `node_count` bigint NOT NULL default '0',
     `account_id` bigint unsigned NOT NULL COMMENT 'owner of this cluster',
     `domain_id` bigint unsigned NOT NULL COMMENT 'owner of this cluster',
@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS `cloud`.`sb_ccs_container_cluster_details` (
     `registry_password` varchar(255),
     `registry_url` varchar(255),
     `registry_email` varchar(255),
+    `network_cleanup` tinyint unsigned NOT NULL DEFAULT 1 COMMENT 'true if network needs to be clean up on deletion of container cluster. Should be false if user specfied network for the cluster',
 
     PRIMARY KEY(`id`),
     CONSTRAINT `container_cluster_details_cluster__id` FOREIGN KEY `container_cluster_details_cluster__id`(`cluster_id`) REFERENCES `sb_ccs_container_cluster`(`id`) ON DELETE CASCADE

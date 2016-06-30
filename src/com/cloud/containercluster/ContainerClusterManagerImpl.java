@@ -358,6 +358,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 SecureRandom random = new SecureRandom();
                 String randomPassword = new BigInteger(130, random).toString(32);
                 clusterDetails.setPassword(randomPassword);
+                clusterDetails.setNetworkCleanup(networkId == null);
                 _containerClusterDetailsDao.persist(clusterDetails);
                 return clusterDetails;
             }
@@ -390,8 +391,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     }
 
     // perform a cold start (which will provision resources as well)
-    private boolean startContainerClusterOnCreate(long containerClusterId) throws ManagementServerException,
-            ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
+    private boolean startContainerClusterOnCreate(long containerClusterId) throws ManagementServerException {
 
         // Starting a contriner cluster has below workflow
         //   - start the newtwork
@@ -413,7 +413,15 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         Account account = _accountDao.findById(containerCluster.getAccountId());
 
-        final DeployDestination dest = plan(containerClusterId, containerCluster.getZoneId());
+        DeployDestination dest = null;
+        try {
+            dest = plan(containerClusterId, containerCluster.getZoneId());
+        }
+        catch (InsufficientCapacityException e){
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+            s_logger.warn("Provisioning the cluster failed due to insufficient capacity in the container cluster: " + containerCluster.getName() + " due to " + e);
+            throw new ManagementServerException("Provisioning the cluster failed due to insufficient capacity in the container cluster: " + containerCluster.getName(), e);
+        }
         final ReservationContext context = new ReservationContextImpl(null, null, null, account);
 
         try {
@@ -610,6 +618,10 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
             final UserVmVO vm = _userVmDao.findById(vmMapVO.getVmId());
             try {
+                if (vm == null) {
+                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                    throw new ManagementServerException("Failed to start all VMs in container cluster id: " + containerClusterId);
+                }
                 startK8SVM(vm, containerCluster);
             } catch (ServerApiException ex) {
                 s_logger.warn("Failed to start VM in container cluster id:" + containerClusterId + " due to " + ex);
@@ -619,7 +631,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
             final UserVmVO vm = _userVmDao.findById(vmMapVO.getVmId());
-            if (!vm.getState().equals(VirtualMachine.State.Running)) {
+            if (vm == null || !vm.getState().equals(VirtualMachine.State.Running)) {
                 stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
                 throw new ManagementServerException("Failed to start all VMs in container cluster id: " + containerClusterId);
             }
@@ -895,16 +907,22 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         stateTransitTo(containerClusterId, ContainerCluster.Event.StopRequested);
 
         for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
+            final UserVmVO vm = _userVmDao.findById(vmMapVO.getVmId());
             try {
+                if (vm == null) {
+                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                    throw new ManagementServerException("Failed to start all VMs in container cluster id: " + containerClusterId);
+                }
                 stopK8SVM(vmMapVO);
             } catch (ServerApiException ex) {
                 s_logger.warn("Failed to stop VM in container cluster id:" + containerClusterId + " due to " + ex);
+                // dont bail out here. proceed further to stop the reset of the VM's
             }
         }
 
         for (final ContainerClusterVmMapVO vmMapVO : _clusterVmMapDao.listByClusterId(containerClusterId)) {
             final UserVmVO vm = _userVmDao.findById(vmMapVO.getVmId());
-            if (!vm.getState().equals(VirtualMachine.State.Stopped)) {
+            if (vm == null || !vm.getState().equals(VirtualMachine.State.Stopped)) {
                 stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
                 throw new ManagementServerException("Failed to stop all VMs in container cluster id: " + containerClusterId);
             }
@@ -1016,36 +1034,40 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 }
             }
         }
+        ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerClusterId);
+        boolean cleanupNetwork = clusterDetails.getNetworkCleanup();
 
         // if there are VM's that were not expunged, we can not delete the network
         if(!failedVmDestroy) {
-            NetworkVO network = null;
-            try {
-                network = _networkDao.findById(cluster.getNetworkId());
-                if (network != null && network.getRemoved() == null) {
-                    Account owner = _accountMgr.getAccount(network.getAccountId());
-                    User callerUser = _accountMgr.getActiveUser(CallContext.current().getCallingUserId());
-                    ReservationContext context = new ReservationContextImpl(null, null, callerUser, owner);
-                    _networkMgr.destroyNetwork(cluster.getNetworkId(), context, true);
-                    if(s_logger.isDebugEnabled()) {
-                        s_logger.debug("Destroyed network: " +  network.getName() + " as part of cluster: " + cluster.getName() + " destroy");
+            if (cleanupNetwork) {
+                NetworkVO network = null;
+                try {
+                    network = _networkDao.findById(cluster.getNetworkId());
+                    if (network != null && network.getRemoved() == null) {
+                        Account owner = _accountMgr.getAccount(network.getAccountId());
+                        User callerUser = _accountMgr.getActiveUser(CallContext.current().getCallingUserId());
+                        ReservationContext context = new ReservationContextImpl(null, null, callerUser, owner);
+                        _networkMgr.destroyNetwork(cluster.getNetworkId(), context, true);
+                        if(s_logger.isDebugEnabled()) {
+                            s_logger.debug("Destroyed network: " +  network.getName() + " as part of cluster: " + cluster.getName() + " destroy");
+                        }
                     }
-                }
-            } catch (Exception e) {
-                if (s_logger.isDebugEnabled()) {
-                    s_logger.debug("Failed to destroy network: " + cluster.getNetworkId() +
-                            " as part of cluster: " + cluster.getName() + "  destroy due to " + e);
-                }
-                stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
-                cluster = _containerClusterDao.findById(containerClusterId);
-                cluster.setCheckForGc(true);
-                _containerClusterDao.update(cluster.getId(), cluster);
+                } catch (Exception e) {
+                    if (s_logger.isDebugEnabled()) {
+                        s_logger.debug("Failed to destroy network: " + cluster.getNetworkId() +
+                                " as part of cluster: " + cluster.getName() + "  destroy due to " + e);
+                    }
+                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                    cluster = _containerClusterDao.findById(containerClusterId);
+                    cluster.setCheckForGc(true);
+                    _containerClusterDao.update(cluster.getId(), cluster);
 
-                throw new ManagementServerException("Failed to delete the network as part of container cluster name:" + cluster.getName() + " clean up");
+                    throw new ManagementServerException("Failed to delete the network as part of container cluster name:" + cluster.getName() + " clean up");
+                }
             }
         } else {
             if (s_logger.isDebugEnabled()) {
-                s_logger.debug("Not deleting the network as there are VM's that are not expunged in container cluster " + cluster.getName());
+                s_logger.debug("There are VM's that are not expunged in container cluster " + cluster.getName());
             }
             stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             cluster = _containerClusterDao.findById(containerClusterId);
