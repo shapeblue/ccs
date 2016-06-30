@@ -31,7 +31,6 @@ CloudStack Container Service plugin by ShapeBlue.
 %package ccs
 Summary:   CloudStack Container Service Plugin
 Requires: %{name}-management >= 4.5.0
-Requires: /usr/bin/curl
 Group:     System Environment/Libraries
 %description ccs
 The CloudStack Container Service Plugin by ShapeBlue.
@@ -60,6 +59,7 @@ cp -r ../../../../ui/plugins/ccs ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management
 cp -r ../../../../schema/* ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup/
 cp -r ../../../../conf/* ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
 cp -r ../../../../scripts/setup/* ${RPM_BUILD_ROOT}%{_bindir}/
+cp ../../../../deps/kubectl ${RPM_BUILD_ROOT}%{_bindir}/
 
 %clean
 [ ${RPM_BUILD_ROOT} != "/" ] && rm -rf ${RPM_BUILD_ROOT}
@@ -86,9 +86,6 @@ if [ -f /usr/share/cloudstack-management/webapps/client/plugins/plugins.js ]; th
     fi
 fi
 
-curl -L -o /usr/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.2.4/bin/linux/amd64/kubectl
-chmod +x /usr/bin/kubectl
-
 %postun ccs
 echo "Running through the post-uninstall ccs pkg steps"
 if [ "$1" == "0" ] ; then
@@ -101,7 +98,6 @@ if [ "$1" == "0" ] ; then
         fi
     fi
 fi
-rm -f /usr/bin/kubectl
 
 %files ccs
 %defattr(-,root,root,-)
@@ -111,6 +107,7 @@ rm -f /usr/bin/kubectl
 %{_bindir}/ccs-setup-database
 %{_bindir}/ccs-cleanup-database
 %{_bindir}/ccs-template-install
+%{_bindir}/kubectl
 %changelog
 * Fri Jun 03 2016 ShapeBlue <enginering@shapeblue.com> 1.0.0
 - CloudStack Container Service Plugin

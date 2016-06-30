@@ -15,6 +15,4 @@ case "$1" in
         ;;
 esac
 
-rm -f /usr/bin/kubectl
-
 exit 0

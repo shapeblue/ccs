@@ -62,6 +62,7 @@ install:
 	cp -r ../schema/* $(DESTDIR)/usr/share/$(PACKAGE)-management/setup/
 	cp -r ../conf/* $(DESTDIR)/$(SYSCONFDIR)/$(PACKAGE)/management/
 	cp -r ../scripts/setup/* $(DESTDIR)/$(USRBINDIR)/
+	cp ../deps/kubectl $(DESTDIR)/$(USRBINDIR)/
 
 	dh_installdirs
 	dh_install
