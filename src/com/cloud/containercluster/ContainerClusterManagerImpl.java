@@ -390,8 +390,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     }
 
     // perform a cold start (which will provision resources as well)
-    private boolean startContainerClusterOnCreate(long containerClusterId) throws ManagementServerException,
-            ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
+    private boolean startContainerClusterOnCreate(long containerClusterId) throws ManagementServerException {
 
         // Starting a contriner cluster has below workflow
         //   - start the newtwork
@@ -413,7 +412,15 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         Account account = _accountDao.findById(containerCluster.getAccountId());
 
-        final DeployDestination dest = plan(containerClusterId, containerCluster.getZoneId());
+        final DeployDestination dest = null;
+        try {
+            plan(containerClusterId, containerCluster.getZoneId());
+        }
+        catch (InsufficientCapacityException e){
+            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+            s_logger.warn("Provisioning the cluster failed due to insufficient capacity in the container cluster: " + containerCluster.getName() + " due to " + e);
+            throw new ManagementServerException("Provisioning the cluster failed due to insufficient capacity in the container cluster: " + containerCluster.getName(), e);
+        }
         final ReservationContext context = new ReservationContextImpl(null, null, null, account);
 
         try {
