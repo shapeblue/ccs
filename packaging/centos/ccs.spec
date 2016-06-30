@@ -31,6 +31,7 @@ CloudStack Container Service plugin by ShapeBlue.
 %package ccs
 Summary:   CloudStack Container Service Plugin
 Requires: %{name}-management >= 4.5.0
+Requires: /usr/bin/curl
 Group:     System Environment/Libraries
 %description ccs
 The CloudStack Container Service Plugin by ShapeBlue.
@@ -85,6 +86,9 @@ if [ -f /usr/share/cloudstack-management/webapps/client/plugins/plugins.js ]; th
     fi
 fi
 
+curl -L -o /usr/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.2.4/bin/linux/amd64/kubectl
+chmod +x /usr/bin/kubectl
+
 %postun ccs
 echo "Running through the post-uninstall ccs pkg steps"
 if [ "$1" == "0" ] ; then
@@ -97,6 +101,7 @@ if [ "$1" == "0" ] ; then
         fi
     fi
 fi
+rm -f /usr/bin/kubectl
 
 %files ccs
 %defattr(-,root,root,-)
