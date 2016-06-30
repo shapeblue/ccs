@@ -358,6 +358,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 SecureRandom random = new SecureRandom();
                 String randomPassword = new BigInteger(130, random).toString(32);
                 clusterDetails.setPassword(randomPassword);
+                clusterDetails.setNetworkCleanup(networkId == null);
                 _containerClusterDetailsDao.persist(clusterDetails);
                 return clusterDetails;
             }
@@ -1033,36 +1034,40 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 }
             }
         }
+        ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerClusterId);
+        boolean cleanupNetwork = clusterDetails.getNetworkCleanup();
 
         // if there are VM's that were not expunged, we can not delete the network
         if(!failedVmDestroy) {
-            NetworkVO network = null;
-            try {
-                network = _networkDao.findById(cluster.getNetworkId());
-                if (network != null && network.getRemoved() == null) {
-                    Account owner = _accountMgr.getAccount(network.getAccountId());
-                    User callerUser = _accountMgr.getActiveUser(CallContext.current().getCallingUserId());
-                    ReservationContext context = new ReservationContextImpl(null, null, callerUser, owner);
-                    _networkMgr.destroyNetwork(cluster.getNetworkId(), context, true);
-                    if(s_logger.isDebugEnabled()) {
-                        s_logger.debug("Destroyed network: " +  network.getName() + " as part of cluster: " + cluster.getName() + " destroy");
+            if (cleanupNetwork) {
+                NetworkVO network = null;
+                try {
+                    network = _networkDao.findById(cluster.getNetworkId());
+                    if (network != null && network.getRemoved() == null) {
+                        Account owner = _accountMgr.getAccount(network.getAccountId());
+                        User callerUser = _accountMgr.getActiveUser(CallContext.current().getCallingUserId());
+                        ReservationContext context = new ReservationContextImpl(null, null, callerUser, owner);
+                        _networkMgr.destroyNetwork(cluster.getNetworkId(), context, true);
+                        if(s_logger.isDebugEnabled()) {
+                            s_logger.debug("Destroyed network: " +  network.getName() + " as part of cluster: " + cluster.getName() + " destroy");
+                        }
                     }
-                }
-            } catch (Exception e) {
-                if (s_logger.isDebugEnabled()) {
-                    s_logger.debug("Failed to destroy network: " + cluster.getNetworkId() +
-                            " as part of cluster: " + cluster.getName() + "  destroy due to " + e);
-                }
-                stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
-                cluster = _containerClusterDao.findById(containerClusterId);
-                cluster.setCheckForGc(true);
-                _containerClusterDao.update(cluster.getId(), cluster);
+                } catch (Exception e) {
+                    if (s_logger.isDebugEnabled()) {
+                        s_logger.debug("Failed to destroy network: " + cluster.getNetworkId() +
+                                " as part of cluster: " + cluster.getName() + "  destroy due to " + e);
+                    }
+                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                    cluster = _containerClusterDao.findById(containerClusterId);
+                    cluster.setCheckForGc(true);
+                    _containerClusterDao.update(cluster.getId(), cluster);
 
-                throw new ManagementServerException("Failed to delete the network as part of container cluster name:" + cluster.getName() + " clean up");
+                    throw new ManagementServerException("Failed to delete the network as part of container cluster name:" + cluster.getName() + " clean up");
+                }
             }
         } else {
             if (s_logger.isDebugEnabled()) {
-                s_logger.debug("Not deleting the network as there are VM's that are not expunged in container cluster " + cluster.getName());
+                s_logger.debug("There are VM's that are not expunged in container cluster " + cluster.getName());
             }
             stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
             cluster = _containerClusterDao.findById(containerClusterId);
