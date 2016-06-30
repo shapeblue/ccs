@@ -412,7 +412,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         Account account = _accountDao.findById(containerCluster.getAccountId());
 
-        final DeployDestination dest = null;
+        DeployDestination dest = null;
         try {
             dest = plan(containerClusterId, containerCluster.getZoneId());
         }
