@@ -249,7 +249,7 @@ public class ContainerClusterResponse extends BaseResponse implements Controlled
     @Param(description = "the list of virtualmachine ids associated with this container cluster")
     private List<String> virtualMachineIds;
 
-    @SerializedName(ApiConstants.USER_ID)
+    @SerializedName(ApiConstants.USERNAME)
     @Param(description = "Username with which container cluster is setup")
     private String username;
 

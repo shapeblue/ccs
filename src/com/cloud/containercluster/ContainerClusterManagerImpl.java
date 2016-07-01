@@ -1166,11 +1166,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             final String caCert = "{{ k8s_master.ca.crt }}";
 
             final KeystoreVO rootCA = keystoreDao.findByName(CCS_ROOTCA_KEYPAIR);
-            final PrivateKey rootCAPrivateKey = PemToRSAPrivateKey(rootCA.getKey());
-            final X509Certificate rootCACert = PemToX509Cert(rootCA.getCertificate());
+            final PrivateKey rootCAPrivateKey = pemToRSAPrivateKey(rootCA.getKey());
+            final X509Certificate rootCACert = pemToX509Cert(rootCA.getCertificate());
             final KeyPair keyPair = generateRandomKeyPair();
-            final String tlsClientCert = X509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, publicIP.getAddress().addr(), true));
-            final String tlsPrivateKey = RSAPrivateKeyToPem(keyPair.getPrivate());
+            final String tlsClientCert = x509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, publicIP.getAddress().addr(), true));
+            final String tlsPrivateKey = rsaPrivateKeyToPem(keyPair.getPrivate());
 
             k8sMasterConfig = k8sMasterConfig.replace(password, randomPassword);
             k8sMasterConfig = k8sMasterConfig.replace(user, "admin");
@@ -1244,11 +1244,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             final String caCert = "{{ k8s_node.ca.crt }}";
 
             final KeystoreVO rootCA = keystoreDao.findByName(CCS_ROOTCA_KEYPAIR);
-            final PrivateKey rootCAPrivateKey = PemToRSAPrivateKey(rootCA.getKey());
-            final X509Certificate rootCACert = PemToX509Cert(rootCA.getCertificate());
+            final PrivateKey rootCAPrivateKey = pemToRSAPrivateKey(rootCA.getKey());
+            final X509Certificate rootCACert = pemToX509Cert(rootCA.getCertificate());
             final KeyPair keyPair = generateRandomKeyPair();
-            final String tlsClientCert = X509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, "", false));
-            final String tlsPrivateKey = RSAPrivateKeyToPem(keyPair.getPrivate());
+            final String tlsClientCert = x509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, "", false));
+            final String tlsPrivateKey = rsaPrivateKeyToPem(keyPair.getPrivate());
 
             k8sNodeConfig = k8sNodeConfig.replace(masterIPString, masterIp);
             k8sNodeConfig = k8sNodeConfig.replace(clientCert, tlsClientCert.replace("\n", "\n      "));
@@ -1778,8 +1778,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         if (keyStoreVO == null) {
                 try {
                     final KeyPair keyPair = generateRandomKeyPair();
-                    final String rootCACert = X509CertificateToPem(generateRootCACertificate(keyPair));
-                    final String rootCAKey = RSAPrivateKeyToPem(keyPair.getPrivate());
+                    final String rootCACert = x509CertificateToPem(generateRootCACertificate(keyPair));
+                    final String rootCAKey = rsaPrivateKeyToPem(keyPair.getPrivate());
                     keystoreDao.save(CCS_ROOTCA_KEYPAIR, rootCACert, rootCAKey, "");
                     s_logger.info("No Container Cluster CA stores found, created and saved a keypair with certificate: \n" + rootCACert);
                 } catch (NoSuchProviderException | NoSuchAlgorithmException | CertificateEncodingException | SignatureException | InvalidKeyException | IOException e) {
@@ -1856,12 +1856,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return keyFactory;
     }
 
-    public X509Certificate PemToX509Cert(final String pem) throws IOException {
+    public X509Certificate pemToX509Cert(final String pem) throws IOException {
         final PEMReader pr = new PEMReader(new StringReader(pem));
         return (X509Certificate) pr.readObject();
     }
 
-    public String X509CertificateToPem(final X509Certificate cert) throws IOException {
+    public String x509CertificateToPem(final X509Certificate cert) throws IOException {
         final StringWriter sw = new StringWriter();
         try (final PEMWriter pw = new PEMWriter(sw)) {
             pw.writeObject(cert);
@@ -1869,14 +1869,14 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return sw.toString();
     }
 
-    public PrivateKey PemToRSAPrivateKey(final String pem) throws InvalidKeySpecException, IOException {
+    public PrivateKey pemToRSAPrivateKey(final String pem) throws InvalidKeySpecException, IOException {
         final PEMReader pr = new PEMReader(new StringReader(pem));
         final PemObject pemObject = pr.readPemObject();
         final KeyFactory keyFactory = getKeyFactory();
         return keyFactory.generatePrivate(new PKCS8EncodedKeySpec(pemObject.getContent()));
     }
 
-    public String RSAPrivateKeyToPem(final PrivateKey key) throws IOException {
+    public String rsaPrivateKeyToPem(final PrivateKey key) throws IOException {
         final PemObject pemObject = new PemObject(CCS_RSA_PRIVATE_KEY, key.getEncoded());
         final StringWriter sw = new StringWriter();
         try (final PEMWriter pw = new PEMWriter(sw)) {
