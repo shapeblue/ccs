@@ -56,7 +56,7 @@ mkdir -p ${RPM_BUILD_ROOT}%{_bindir}/
 
 cp -r target/cloud-plugin-ccs-%{_maventag}.jar ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib/
 cp -r ../../../../ui/plugins/ccs ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/plugins/
-cp -r ../../../../schema/* ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup/
+cp -r ../../../../schema/delete-schema-ccs.sql ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup/delete-schema-ccs.sql
 cp -r ../../../../conf/* ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
 cp -r ../../../../scripts/setup/* ${RPM_BUILD_ROOT}%{_bindir}/
 cp ../../../../deps/kubectl ${RPM_BUILD_ROOT}%{_bindir}/
@@ -103,7 +103,7 @@ fi
 %files ccs
 %defattr(-,root,root,-)
 %{_datadir}/%{name}-management/webapps
-%{_datadir}/%{name}-management/setup/*.sql
+%{_datadir}/%{name}-management/setup/delete-schema-ccs.sql
 %{_sysconfdir}/%{name}/management/*.yml
 %{_bindir}/ccs-cleanup-database
 %{_bindir}/ccs-template-install
