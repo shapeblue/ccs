@@ -41,6 +41,7 @@
     <cs.jpa.version>2.0.0</cs.jpa.version>
     <cs.mockito.version>1.9.5</cs.mockito.version>
     <cs.powermock.version>1.5.3</cs.powermock.version>
+    <cs.bcprov.version>1.46</cs.bcprov.version>
 
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
@@ -293,6 +294,11 @@
 	  <artifactId>powermock-api-mockito</artifactId>
 	  <version>${cs.powermock.version}</version>
 	  <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk16</artifactId>
+      <version>${cs.bcprov.version}</version>
     </dependency>
   </dependencies>
 
