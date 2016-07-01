@@ -6,9 +6,6 @@
             id: 'ccs',
             title: 'Container Service',
             showOnNavigation: true,
-            preFilter: function(args) {
-                return isAdmin();
-            },
             sections: {
                 containercluster: {
                     id: 'containerclusters',
@@ -22,12 +19,6 @@
                                 label: 'state.Running'
                             },
                             destroyed: {
-                                preFilter: function(args) {
-                                    if (isAdmin() || isDomainAdmin())
-                                    return true;
-                                    else
-                                    return false;
-                                },
                                 label: 'state.Destroyed'
                             }
                         },
