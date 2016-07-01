@@ -83,17 +83,6 @@ INSERT IGNORE INTO ntwk_offering_service_map (network_offering_id, service, prov
 INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'management-server',
 'cloud.container.cluster.network.offering', 'DefaultNetworkOfferingforContainerService' , 'Network Offering used for CloudStack container service', 'DefaultNetworkOfferingforContainerService', NULL , NULL, 0);
 
-CREATE TABLE IF NOT EXISTS `cloud`.`sb_ccs_version` (
-     `id` bigint unsigned NOT NULL UNIQUE AUTO_INCREMENT COMMENT 'id',
-     `version` char(40) NOT NULL UNIQUE COMMENT 'version',
-     `updated` datetime NOT NULL COMMENT 'Date this version table was updated',
-     `step` char(32) NOT NULL COMMENT 'Step in the upgrade to this version',
-     PRIMARY KEY (`id`),
-     INDEX `i_version__version`(`version`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
-INSERT IGNORE INTO `cloud`.`sb_ccs_version` (version, updated, step) VALUES ('1.0', now(), 'Complete');
-
 INSERT IGNORE INTO `cloud`.`guest_os` (id, uuid, category_id, display_name, created) VALUES (255, UUID(), 7, 'CoreOS', utc_timestamp());
 INSERT IGNORE INTO `cloud`.`guest_os_hypervisor` (uuid,hypervisor_type, hypervisor_version, guest_os_name, guest_os_id, created, is_user_defined) VALUES (UUID(),'XenServer', 'default', 'CoreOS', 255, utc_timestamp(), 0);
 INSERT IGNORE INTO `cloud`.`guest_os_hypervisor` (uuid,hypervisor_type, hypervisor_version, guest_os_name, guest_os_id, created, is_user_defined) VALUES (UUID(),'VmWare', 'default', 'coreos64Guest', 255, utc_timestamp(), 0);

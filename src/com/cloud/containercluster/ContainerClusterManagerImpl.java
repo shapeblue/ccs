@@ -81,6 +81,7 @@ import com.cloud.utils.Pair;
 import com.cloud.utils.component.ComponentContext;
 import com.cloud.utils.component.ManagerBase;
 import com.cloud.utils.concurrency.NamedThreadFactory;
+import com.cloud.utils.db.DbProperties;
 import com.cloud.utils.db.Filter;
 import com.cloud.utils.db.GlobalLock;
 import com.cloud.utils.db.Transaction;
@@ -134,6 +135,7 @@ import org.bouncycastle.x509.X509V1CertificateGenerator;
 import org.bouncycastle.x509.X509V3CertificateGenerator;
 import org.bouncycastle.x509.extension.AuthorityKeyIdentifierStructure;
 import org.bouncycastle.x509.extension.SubjectKeyIdentifierStructure;
+import org.flywaydb.core.Flyway;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 
@@ -176,6 +178,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -1736,6 +1739,25 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     public boolean start() {
         _gcExecutor.scheduleWithFixedDelay(new ContainerClusterGarbageCollector(), 300, 300, TimeUnit.SECONDS);
         _stateScanner.scheduleWithFixedDelay(new ContainerClusterStatusScanner(), 300, 30, TimeUnit.SECONDS);
+
+        // run the data base migration.
+        Properties dbProps = DbProperties.getDbProperties();
+        final String cloudUsername = dbProps.getProperty("db.cloud.username");
+        final String cloudPassword = dbProps.getProperty("db.cloud.password");
+        final String cloudHost = dbProps.getProperty("db.cloud.host");
+        final int cloudPort = Integer.parseInt(dbProps.getProperty("db.cloud.port"));
+        final String dbUrl = "jdbc:mysql://" + cloudHost + ":" + cloudPort + "/cloud";
+
+        Flyway flyway = new Flyway();
+        flyway.setDataSource(dbUrl, cloudUsername, cloudPassword);
+
+        // make the existing cloud DB schema and data as baseline
+        flyway.setBaselineOnMigrate(true);
+        flyway.setBaselineVersionAsString("0");
+
+        // apply CCS schema
+        flyway.migrate();
+
         return true;
     }
 

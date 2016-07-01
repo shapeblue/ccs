@@ -63,6 +63,7 @@ install:
 	cp -r ../conf/* $(DESTDIR)/$(SYSCONFDIR)/$(PACKAGE)/management/
 	cp -r ../scripts/setup/* $(DESTDIR)/$(USRBINDIR)/
 	cp ../deps/kubectl $(DESTDIR)/$(USRBINDIR)/
+	cp ../deps/flyway-core-4.0.3.jar $(DESTDIR)/usr/share/$(PACKAGE)-management/webapps/client/WEB-INF/lib/
 
 	dh_installdirs
 	dh_install

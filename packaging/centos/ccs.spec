@@ -60,6 +60,7 @@ cp -r ../../../../schema/* ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup
 cp -r ../../../../conf/* ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
 cp -r ../../../../scripts/setup/* ${RPM_BUILD_ROOT}%{_bindir}/
 cp ../../../../deps/kubectl ${RPM_BUILD_ROOT}%{_bindir}/
+cp ../../../../deps/flyway-core-4.0.3.jar ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib/
 
 %clean
 [ ${RPM_BUILD_ROOT} != "/" ] && rm -rf ${RPM_BUILD_ROOT}
@@ -104,7 +105,6 @@ fi
 %{_datadir}/%{name}-management/webapps
 %{_datadir}/%{name}-management/setup/*.sql
 %{_sysconfdir}/%{name}/management/*.yml
-%{_bindir}/ccs-setup-database
 %{_bindir}/ccs-cleanup-database
 %{_bindir}/ccs-template-install
 %{_bindir}/kubectl

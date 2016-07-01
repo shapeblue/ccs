@@ -53,6 +53,9 @@
       <resource>
         <directory>${basedir}/resources</directory>
       </resource>
+      <resource>
+        <directory>${basedir}/schema/db</directory>
+      </resource>
     </resources>
     <testResources>
       <testResource>
@@ -293,6 +296,11 @@
 	  <artifactId>powermock-api-mockito</artifactId>
 	  <version>${cs.powermock.version}</version>
 	  <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-core</artifactId>
+      <version>4.0.3</version>
     </dependency>
   </dependencies>
 
