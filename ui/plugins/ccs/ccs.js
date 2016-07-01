@@ -557,7 +557,7 @@
                                             label: 'Dashboard endpoint',
                                             isCopyPaste: true
                                         },
-                                        userid: {
+                                        username: {
                                             label: 'username',
                                             isCopyPaste: true
                                         },
@@ -586,10 +586,14 @@
                                 console : {
                                     title: 'Dashboard',
                                     custom : function (args) {
-                                        var s1 = '<iframe src="';
-                                        var s2 = args.context.containerclusters[0].consoleendpoint;
-                                        var s3 = '" width="940" height="600")>';
-                                        return jQuery(s1.concat(s2, s3));
+                                        var endPoint = args.context.containerclusters[0].consoleendpoint;
+                                        var protocol = endPoint.split("://")[0] + "://";
+                                        var uri = endPoint.split("://")[1];
+                                        var authUrl = protocol + args.context.containerclusters[0].username + ":" + args.context.containerclusters[0].password + "@" + uri;
+                                        var popOut = '<p align="right"><a href="' + authUrl + '" target="_blank">Pop-out ↗</a></p>';
+                                        var iframe = popOut + '<iframe src="';
+                                        var iframeArgs = '" width="770" height="560")>';
+                                        return jQuery(iframe.concat(authUrl, iframeArgs));
                                     }
                                 },
                                 clusterinstances: {
