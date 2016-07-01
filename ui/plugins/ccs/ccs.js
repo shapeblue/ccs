@@ -403,6 +403,7 @@
                                 success: function(json) {
                                     var items = json.listcontainerclusterresponse.containercluster;
                                     args.response.success({
+                                        actionFilter: ccsActionfilter,
                                         data: items
                                     });
                                 }
@@ -577,6 +578,7 @@
                                                 if (json.listcontainerclusterresponse.containercluster != null && json.listcontainerclusterresponse.containercluster.length > 0)
                                                 jsonObj = json.listcontainerclusterresponse.containercluster[0];
                                                 args.response.success({
+                                                    actionFilter: ccsActionfilter,
                                                     data: jsonObj
                                                 });
                                             }
@@ -587,13 +589,19 @@
                                     title: 'Dashboard',
                                     custom : function (args) {
                                         var endPoint = args.context.containerclusters[0].consoleendpoint;
+                                        var username = args.context.containerclusters[0].username;
+                                        var password = args.context.containerclusters[0].password;
                                         var protocol = endPoint.split("://")[0] + "://";
                                         var uri = endPoint.split("://")[1];
-                                        var authUrl = protocol + args.context.containerclusters[0].username + ":" + args.context.containerclusters[0].password + "@" + uri;
-                                        var popOut = '<p align="right"><a href="' + authUrl + '" target="_blank">Pop-out ↗</a></p>';
+
+                                        var dashboardUrl = endPoint;
+                                        if (username && password && endPoint) {
+                                            dashboardUrl = protocol + username + ":" + password + "@" + uri;
+                                        }
+                                        var popOut = '<p align="right"><a href="' + dashboardUrl + '" target="_blank">Pop-out ↗</a></p>';
                                         var iframe = popOut + '<iframe src="';
                                         var iframeArgs = '" width="770" height="560")>';
-                                        return jQuery(iframe.concat(authUrl, iframeArgs));
+                                        return jQuery(iframe.concat(dashboardUrl, iframeArgs));
                                     }
                                 },
                                 clusterinstances: {
@@ -751,4 +759,19 @@
 
         });
     };
+
+    var ccsActionfilter = cloudStack.actionFilter.ccsActionfilter = function(args) {
+        var jsonObj = args.context.item;
+        var allowedActions = [];
+        if (jsonObj.state != "Destroyed" && jsonObj.state != "Destroying") {
+            if (jsonObj.state == "Stopped") {
+                allowedActions.push("start");
+            } else {
+                allowedActions.push("stop");
+            }
+            allowedActions.push("destroy");
+        }
+        return allowedActions;
+    }
+
 }(cloudStack));
