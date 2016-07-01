@@ -136,6 +136,7 @@ import org.bouncycastle.x509.X509V3CertificateGenerator;
 import org.bouncycastle.x509.extension.AuthorityKeyIdentifierStructure;
 import org.bouncycastle.x509.extension.SubjectKeyIdentifierStructure;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.FlywayException;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 
@@ -1748,15 +1749,20 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         final int cloudPort = Integer.parseInt(dbProps.getProperty("db.cloud.port"));
         final String dbUrl = "jdbc:mysql://" + cloudHost + ":" + cloudPort + "/cloud";
 
-        Flyway flyway = new Flyway();
-        flyway.setDataSource(dbUrl, cloudUsername, cloudPassword);
+        try {
+            Flyway flyway = new Flyway();
+            flyway.setDataSource(dbUrl, cloudUsername, cloudPassword);
 
-        // make the existing cloud DB schema and data as baseline
-        flyway.setBaselineOnMigrate(true);
-        flyway.setBaselineVersionAsString("0");
+            // make the existing cloud DB schema and data as baseline
+            flyway.setBaselineOnMigrate(true);
+            flyway.setBaselineVersionAsString("0");
 
-        // apply CCS schema
-        flyway.migrate();
+            // apply CCS schema
+            flyway.migrate();
+        } catch (FlywayException fwe) {
+            s_logger.error("Failed to run migration on Cloudstack Container Service database due to " + fwe);
+            return false;
+        }
 
         return true;
     }
