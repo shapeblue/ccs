@@ -5,6 +5,9 @@
         plugin.ui.addSection({
             id: 'ccs',
             title: 'Container Service',
+            preFilter: function(args) {
+                return true;
+            },
             showOnNavigation: true,
             sections: {
                 containercluster: {
