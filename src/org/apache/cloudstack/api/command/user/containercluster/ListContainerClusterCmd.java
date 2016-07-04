@@ -52,12 +52,27 @@ public class ListContainerClusterCmd extends BaseListCmd {
             description = "the ID of the container cluster")
     private Long id;
 
+    @Parameter(name = ApiConstants.STATE, type = CommandType.STRING, description = "state of the container cluster")
+    private String state;
+
+    @Parameter(name = ApiConstants.NAME, type = CommandType.STRING, description = "name of the container cluster" +
+            " (a substring match is made against the parameter value, data for all matching container clusters will be returned)")
+    private String name;
+
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
     /////////////////////////////////////////////////////
 
     public Long getId() {
         return id;
+    }
+
+    public String getState() {
+        return state;
+    }
+
+    public String getName() {
+        return name;
     }
 
     @Inject

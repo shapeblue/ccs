@@ -21,6 +21,9 @@
                             running: {
                                 label: 'state.Running'
                             },
+                            stopped: {
+                                label: 'state.Stopped'
+                            },
                             destroyed: {
                                 label: 'state.Destroyed'
                             }
@@ -380,6 +383,11 @@
                                             state: 'Running'
                                         });
                                         break;
+                                        case "stopped":
+                                        $.extend(data, {
+                                            state: 'Stopped'
+                                        });
+                                        break;
                                         case "destroyed":
                                         $.extend(data, {
                                             state: 'Destroyed'
@@ -633,38 +641,6 @@
                                         dataProvider: function(args) {
                                             var data = {};
                                             listViewDataProvider(args, data);
-
-                                            if (args.filterBy != null) { //filter dropdown
-                                                if (args.filterBy.kind != null) {
-                                                    switch (args.filterBy.kind) {
-                                                        case "all":
-                                                        break;
-                                                        case "mine":
-                                                        if (!args.context.projects) {
-                                                            $.extend(data, {
-                                                                domainid: g_domainid,
-                                                                account: g_account
-                                                            });
-                                                        }
-                                                        break;
-                                                        case "running":
-                                                        $.extend(data, {
-                                                            state: 'Running'
-                                                        });
-                                                        break;
-                                                        case "stopped":
-                                                        $.extend(data, {
-                                                            state: 'Stopped'
-                                                        });
-                                                        break;
-                                                        case "destroyed":
-                                                        $.extend(data, {
-                                                            state: 'Destroyed'
-                                                        });
-                                                        break;
-                                                    }
-                                                }
-                                            }
 
                                             $.ajax({
                                                 url: createURL("listContainerCluster"),

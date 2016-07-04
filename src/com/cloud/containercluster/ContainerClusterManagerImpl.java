@@ -83,6 +83,7 @@ import com.cloud.utils.component.ManagerBase;
 import com.cloud.utils.concurrency.NamedThreadFactory;
 import com.cloud.utils.db.Filter;
 import com.cloud.utils.db.GlobalLock;
+import com.cloud.utils.db.SearchCriteria;
 import com.cloud.utils.db.Transaction;
 import com.cloud.utils.db.TransactionCallback;
 import com.cloud.utils.db.TransactionCallbackWithException;
@@ -1362,33 +1363,45 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         ListResponse<ContainerClusterResponse> response = new ListResponse<ContainerClusterResponse>();
 
         List<ContainerClusterResponse> responsesList = new ArrayList<ContainerClusterResponse>();
+        SearchCriteria<ContainerClusterVO> sc = _containerClusterDao.createSearchCriteria();
+
+        String state = cmd.getState();
+        if (state != null && !state.isEmpty()) {
+            if ( !ContainerCluster.State.Running.toString().equals(state) &&
+                    !ContainerCluster.State.Stopped.toString().equals(state) &&
+                    !ContainerCluster.State.Destroyed.toString().equals(state)) {
+                throw new InvalidParameterValueException("Invalid vlaue for cluster state is specified");
+            }
+        }
 
         if (cmd.getId() != null) {
             ContainerClusterVO cluster = _containerClusterDao.findById(cmd.getId());
             if (cluster == null) {
                 throw new InvalidParameterValueException("Invalid cluster id specified");
             }
-
             _accountMgr.checkAccess(caller, SecurityChecker.AccessType.ListEntry, false, cluster);
-
             responsesList.add(createContainerClusterResponse(cmd.getId()));
         } else {
-            if (_accountMgr.isAdmin(caller.getId())) {
+            Filter searchFilter = new Filter(ContainerClusterVO.class, "id", true, cmd.getStartIndex(), cmd.getPageSizeVal());
 
-                Filter searchFilter = new Filter(ContainerClusterVO.class, "id", true, cmd.getStartIndex(), cmd.getPageSizeVal());
-                List<ContainerClusterVO> containerClusters = _containerClusterDao.listAll(searchFilter);
-                for (ContainerClusterVO cluster : containerClusters) {
-                    ContainerClusterResponse clusterReponse = createContainerClusterResponse(cluster.getId());
-                    responsesList.add(clusterReponse);
-                }
-            } else {
-                List<ContainerClusterVO> containerClusters = _containerClusterDao.listByAccount(caller.getAccountId());
-                for (ContainerClusterVO cluster : containerClusters) {
-                    ContainerClusterResponse clusterReponse = createContainerClusterResponse(cluster.getId());
-                    responsesList.add(clusterReponse);
-                }
+            if (state != null && !state.isEmpty()) {
+                sc.addAnd("state", SearchCriteria.Op.EQ, state);
             }
 
+            if (!_accountMgr.isAdmin(caller.getId())) {
+                sc.addAnd("accountId", SearchCriteria.Op.EQ, caller.getAccountId());
+            }
+
+            String name = cmd.getName();
+            if (name != null && !name.isEmpty()) {
+                sc.addAnd("name", SearchCriteria.Op.LIKE, name);
+            }
+
+            List<ContainerClusterVO> containerClusters = _containerClusterDao.search(sc, searchFilter);
+            for (ContainerClusterVO cluster : containerClusters) {
+                ContainerClusterResponse clusterReponse = createContainerClusterResponse(cluster.getId());
+                responsesList.add(clusterReponse);
+            }
         }
         response.setResponses(responsesList);
         return response;
