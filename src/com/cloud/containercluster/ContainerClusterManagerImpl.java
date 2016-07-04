@@ -1153,9 +1153,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         try {
             String masterCloudConfig = _globalConfigDao.getValue(CcsConfig.ContainerClusterMasterCloudConfig.key());
             k8sMasterConfig = readFile(masterCloudConfig);
-            SecureRandom random = new SecureRandom();
 
-            final String randomPassword = new BigInteger(130, random).toString(32);
             final String user = "{{ k8s_master.user }}";
             final String password = "{{ k8s_master.password }}";
             final String apiServerCert = "{{ k8s_master.apiserver.crt }}";
@@ -1169,22 +1167,13 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             final String tlsClientCert = x509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, publicIP.getAddress().addr(), true));
             final String tlsPrivateKey = rsaPrivateKeyToPem(keyPair.getPrivate());
 
-            k8sMasterConfig = k8sMasterConfig.replace(password, randomPassword);
-            k8sMasterConfig = k8sMasterConfig.replace(user, "admin");
             k8sMasterConfig = k8sMasterConfig.replace(apiServerCert, tlsClientCert.replace("\n", "\n      "));
             k8sMasterConfig = k8sMasterConfig.replace(apiServerKey, tlsPrivateKey.replace("\n", "\n      "));
             k8sMasterConfig = k8sMasterConfig.replace(caCert, rootCA.getCertificate().replace("\n", "\n      "));
 
-            ContainerClusterDetailsVO cluster = Transaction.execute(new TransactionCallback<ContainerClusterDetailsVO>() {
-
-                @Override
-                public ContainerClusterDetailsVO doInTransaction(TransactionStatus status) {
-                    ContainerClusterDetailsVO clusterDetails = new ContainerClusterDetailsVO(containerCluster.getId(),
-                            "admin", randomPassword);
-                    _containerClusterDetailsDao.persist(clusterDetails);
-                return clusterDetails;
-                }
-            });
+            ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
+            k8sMasterConfig = k8sMasterConfig.replace(password, clusterDetails.getPassword());
+            k8sMasterConfig = k8sMasterConfig.replace(user, clusterDetails.getUserName());
         } catch (RuntimeException e ) {
             s_logger.error("Failed to read kubernetes master configuration file due to " + e);
             throw new ManagementServerException("Failed to read kubernetes master configuration file", e);
