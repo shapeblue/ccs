@@ -1412,8 +1412,10 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 sc.addAnd("state", SearchCriteria.Op.EQ, state);
             }
 
-            if (!_accountMgr.isAdmin(caller.getId())) {
+            if (_accountMgr.isNormalUser(caller.getId())) {
                 sc.addAnd("accountId", SearchCriteria.Op.EQ, caller.getAccountId());
+            } else if (_accountMgr.isDomainAdmin(caller.getId())) {
+                sc.addAnd("domainId", SearchCriteria.Op.EQ, caller.getDomainId());
             }
 
             String name = cmd.getName();
