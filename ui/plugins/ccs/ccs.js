@@ -692,7 +692,7 @@
                                     custom: function(args) {
                                         $.ajax({
                                             url: createURL('listNetworks'),
-                                            data: {id: args.context.containerclusters[0].networkid},
+                                            data: {id: args.context.containerclusters[0].networkid, listAll: true},
                                             async: false,
                                             dataType: "json",
                                             success: function(json) {
@@ -703,7 +703,7 @@
 
                                         $.ajax({
                                             url: createURL('listPublicIpAddresses'),
-                                            data: {associatedNetworkId: args.context.containerclusters[0].networkid, forvirtualnetwork: true},
+                                            data: {associatedNetworkId: args.context.containerclusters[0].networkid, listAll: true, forvirtualnetwork: true},
                                             async: false,
                                             dataType: "json",
                                             success: function(json) {
