@@ -659,29 +659,35 @@
                                                         ids: vmlist.join()
                                                     });
 
-                                                    $.ajax({
-                                                        url: createURL('listVirtualMachines'),
-                                                        data: data,
-                                                        success: function(json) {
-                                                            var items = json.listvirtualmachinesresponse.virtualmachine;
-                                                            if (items) {
-                                                                $.each(items, function(idx, vm) {
-                                                                    if (vm.nic && vm.nic.length > 0 && vm.nic[0].ipaddress) {
-                                                                        items[idx].ipaddress = vm.nic[0].ipaddress;
-                                                                    }
+                                                    if (data.ids.length == 0) {
+                                                        args.response.success({
+                                                            data: []
+                                                        });
+                                                    } else {
+                                                        $.ajax({
+                                                            url: createURL('listVirtualMachines'),
+                                                            data: data,
+                                                            success: function(json) {
+                                                                var items = json.listvirtualmachinesresponse.virtualmachine;
+                                                                if (items) {
+                                                                    $.each(items, function(idx, vm) {
+                                                                        if (vm.nic && vm.nic.length > 0 && vm.nic[0].ipaddress) {
+                                                                            items[idx].ipaddress = vm.nic[0].ipaddress;
+                                                                        }
+                                                                    });
+                                                                }
+                                                                args.response.success({
+                                                                    data: items
                                                                 });
+                                                            },
+                                                            error: function(XMLHttpResponse) {
+                                                                cloudStack.dialog.notice({
+                                                                    message: parseXMLHttpResponse(XMLHttpResponse)
+                                                                });
+                                                                args.response.error();
                                                             }
-                                                            args.response.success({
-                                                                data: items
-                                                            });
-                                                        },
-                                                        error: function(XMLHttpResponse) {
-                                                            cloudStack.dialog.notice({
-                                                                message: parseXMLHttpResponse(XMLHttpResponse)
-                                                            });
-                                                            args.response.error();
-                                                        }
-                                                    });
+                                                        });
+                                                    }
                                                 }
                                             });
                                        },
