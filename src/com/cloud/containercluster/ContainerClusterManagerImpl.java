@@ -429,7 +429,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     }
 
     // perform a cold start (which will provision resources as well)
-    private boolean startContainerClusterOnCreate(long containerClusterId) throws ManagementServerException {
+    private boolean startContainerClusterOnCreate(final long containerClusterId) throws ManagementServerException {
 
         // Starting a contriner cluster has below workflow
         //   - start the newtwork
@@ -489,6 +489,20 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         UserVm k8sMasterVM = null;
         try {
             k8sMasterVM = createK8SMaster(containerCluster, publicIp);
+
+            final long clusterId = containerCluster.getId();
+            final long masterVmId = k8sMasterVM.getId();
+            Transaction.execute(new TransactionCallback<ContainerClusterVmMapVO>() {
+                @Override
+                public ContainerClusterVmMapVO doInTransaction(TransactionStatus status) {
+                    ContainerClusterVmMapVO newClusterVmMap = new ContainerClusterVmMapVO(clusterId, masterVmId);
+                    _clusterVmMapDao.persist(newClusterVmMap);
+                    return newClusterVmMap;
+                }
+            });
+
+            startK8SVM(k8sMasterVM, containerCluster);
+            k8sMasterVM = _vmDao.findById(k8sMasterVM.getId());
             if (s_logger.isDebugEnabled()) {
                 s_logger.debug("Provisioned the master VM's in to the container cluster name:" + containerCluster.getName());
             }
@@ -502,17 +516,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             throw new ManagementServerException("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName(), e);
         }
 
-        final long clusterId = containerCluster.getId();
-        final long masterVmId = k8sMasterVM.getId();
-        Transaction.execute(new TransactionCallback<ContainerClusterVmMapVO>() {
-            @Override
-            public ContainerClusterVmMapVO doInTransaction(TransactionStatus status) {
-                ContainerClusterVmMapVO newClusterVmMap = new ContainerClusterVmMapVO(clusterId, masterVmId);
-                _clusterVmMapDao.persist(newClusterVmMap);
-                return newClusterVmMap;
-            }
-        });
-
         String masterIP = k8sMasterVM.getPrivateIpAddress();
 
         long anyNodeVmId = 0;
@@ -521,6 +524,18 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             UserVm vm = null;
             try {
                 vm = createK8SNode(containerCluster, masterIP, i);
+                final long nodeVmId = vm.getId();
+                ContainerClusterVmMapVO clusterNodeVmMap = Transaction.execute(new TransactionCallback<ContainerClusterVmMapVO>() {
+                    @Override
+                    public ContainerClusterVmMapVO doInTransaction(TransactionStatus status) {
+                        ContainerClusterVmMapVO newClusterVmMap = new ContainerClusterVmMapVO(containerClusterId, nodeVmId);
+                        _clusterVmMapDao.persist(newClusterVmMap);
+                        return newClusterVmMap;
+                    }
+                });
+                startK8SVM(vm, containerCluster);
+
+                vm = _vmDao.findById(vm.getId());
                 if (s_logger.isDebugEnabled()) {
                     s_logger.debug("Provisioned a node VM in to the container cluster: " + containerCluster.getName());
                 }
@@ -538,23 +553,13 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 anyNodeVmId = vm.getId();
                 k8anyNodeVM = vm;
             }
-
-            final long nodeVmId = vm.getId();
-            ContainerClusterVmMapVO clusterNodeVmMap = Transaction.execute(new TransactionCallback<ContainerClusterVmMapVO>() {
-                @Override
-                public ContainerClusterVmMapVO doInTransaction(TransactionStatus status) {
-                    ContainerClusterVmMapVO newClusterVmMap = new ContainerClusterVmMapVO(clusterId, nodeVmId);
-                    _clusterVmMapDao.persist(newClusterVmMap);
-                    return newClusterVmMap;
-                }
-            });
         }
 
         if (s_logger.isDebugEnabled()) {
             s_logger.debug("Container cluster : " + containerCluster.getName() + " VM's are successfully provisioned.");
         }
 
-        setupContainerClusterNetworkRules(publicIp, account, containerClusterId, masterVmId);
+        setupContainerClusterNetworkRules(publicIp, account, containerClusterId, k8sMasterVM.getId());
 
         int retryCounter = 0;
         int maxRetries = 10;
@@ -1234,9 +1239,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.debug("Created master VM: " + hostName + " in the container cluster: " + containerCluster.getName());
         }
 
-        startK8SVM(masterVm, containerCluster);
-
-        masterVm = _vmDao.findById(masterVm.getId());
         return masterVm;
     }
 
@@ -1333,9 +1335,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.debug("Created cluster node VM: " + hostName + " in the container cluster: " + containerCluster.getName());
         }
 
-        startK8SVM(nodeVm, containerCluster);
-
-        nodeVm = _vmDao.findById(nodeVm.getId());
         return nodeVm;
     }
 
