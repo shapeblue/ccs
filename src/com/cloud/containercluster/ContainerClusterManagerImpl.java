@@ -1118,7 +1118,15 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                         Account owner = _accountMgr.getAccount(network.getAccountId());
                         User callerUser = _accountMgr.getActiveUser(CallContext.current().getCallingUserId());
                         ReservationContext context = new ReservationContextImpl(null, null, callerUser, owner);
-                        _networkMgr.destroyNetwork(cluster.getNetworkId(), context, true);
+                        boolean networkDestroyed = _networkMgr.destroyNetwork(cluster.getNetworkId(), context, true);
+                        if (!networkDestroyed) {
+                            if (s_logger.isDebugEnabled()) {
+                                s_logger.debug("Failed to destroy network: " + cluster.getNetworkId() +
+                                        " as part of cluster: " + cluster.getName()+ " destroy");
+                            }
+                            processFailedNetworkDelete(containerClusterId);
+                            throw new ManagementServerException("Failed to delete the network as part of container cluster name:" + cluster.getName() + " clean up");
+                        }
                         if(s_logger.isDebugEnabled()) {
                             s_logger.debug("Destroyed network: " +  network.getName() + " as part of cluster: " + cluster.getName() + " destroy");
                         }
@@ -1128,11 +1136,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                         s_logger.debug("Failed to destroy network: " + cluster.getNetworkId() +
                                 " as part of cluster: " + cluster.getName() + "  destroy due to " + e);
                     }
-                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
-                    cluster = _containerClusterDao.findById(containerClusterId);
-                    cluster.setCheckForGc(true);
-                    _containerClusterDao.update(cluster.getId(), cluster);
-
+                    processFailedNetworkDelete(containerClusterId);
                     throw new ManagementServerException("Failed to delete the network as part of container cluster name:" + cluster.getName() + " clean up");
                 }
             }
@@ -1140,11 +1144,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             if (s_logger.isDebugEnabled()) {
                 s_logger.debug("There are VM's that are not expunged in container cluster " + cluster.getName());
             }
-            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
-            cluster = _containerClusterDao.findById(containerClusterId);
-            cluster.setCheckForGc(true);
-            _containerClusterDao.update(cluster.getId(), cluster);
-
+            processFailedNetworkDelete(containerClusterId);
             throw new ManagementServerException("Failed to destroy one or more VM's as part of container cluster name:" + cluster.getName() + " clean up");
         }
 
@@ -1163,6 +1163,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return true;
     }
 
+    void processFailedNetworkDelete(long containerClusterId) {
+        stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+        ContainerClusterVO cluster = _containerClusterDao.findById(containerClusterId);
+        cluster.setCheckForGc(true);
+        _containerClusterDao.update(cluster.getId(), cluster);
+    }
 
     UserVm createK8SMaster(final ContainerClusterVO containerCluster, final IPAddressVO publicIP) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
