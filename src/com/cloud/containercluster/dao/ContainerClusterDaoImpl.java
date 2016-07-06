@@ -96,6 +96,6 @@ public class ContainerClusterDaoImpl extends GenericDaoBase<ContainerClusterVO, 
     public List<ContainerClusterVO> listByNetworkId(long networkId) {
         SearchCriteria<ContainerClusterVO> sc = SameNetworkSearch.create();
         sc.setParameters("network_id", networkId);
-        return this.listIncludingRemovedBy(sc);
+        return this.listBy(sc);
     }
 }

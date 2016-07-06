@@ -46,13 +46,16 @@ import com.cloud.network.Network.Service;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.NetworkService;
 import com.cloud.network.PhysicalNetwork;
+import com.cloud.network.dao.FirewallRulesDao;
 import com.cloud.network.dao.IPAddressDao;
 import com.cloud.network.dao.IPAddressVO;
 import com.cloud.network.dao.NetworkDao;
 import com.cloud.network.dao.NetworkVO;
 import com.cloud.network.dao.PhysicalNetworkDao;
 import com.cloud.network.firewall.FirewallService;
+import com.cloud.network.IpAddress;
 import com.cloud.network.rules.FirewallRule;
+import com.cloud.network.rules.FirewallRuleVO;
 import com.cloud.network.rules.PortForwardingRuleVO;
 import com.cloud.network.rules.RulesService;
 import com.cloud.network.rules.dao.PortForwardingRulesDao;
@@ -262,6 +265,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     protected ClusterDetailsDao _clusterDetailsDao;
     @Inject
     protected ClusterDao _clusterDao;
+    @Inject
+    FirewallRulesDao _firewallDao;
 
     @Override
     public ContainerCluster findById(final Long id) {
@@ -832,6 +837,44 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         }
         if (! _networkModel.areServicesSupportedInNetwork(network.getId(), Service.Dhcp)){
             throw new InvalidParameterValueException("This network does not support dhcp that is required for k8s, network id " + network.getId());
+        }
+
+        List<? extends IpAddress> addrs = _networkModel.listPublicIpsAssignedToGuestNtwk(network.getId(), true);
+        IPAddressVO sourceNatIp = null;
+        if (addrs.isEmpty()) {
+            throw new InvalidParameterValueException("The network id:" + network.getId() + " does not have source NAT ip assoicated with it. " +
+                    "To provision a Container Cluster, a isolated network with source NAT is required." );
+        } else {
+            for (IpAddress addr : addrs) {
+                if (addr.isSourceNat()) {
+                    sourceNatIp = _publicIpAddressDao.findById(addr.getId());
+                }
+            }
+            if (sourceNatIp == null) {
+                throw new InvalidParameterValueException("The network id:" + network.getId() + " does not have source NAT ip assoicated with it. " +
+                        "To provision a Container Cluster, a isolated network with source NAT is required." );
+            }
+        }
+        List<FirewallRuleVO> rules= _firewallDao.listByIpAndPurposeAndNotRevoked(sourceNatIp.getId(), FirewallRule.Purpose.Firewall);
+        for (FirewallRuleVO rule : rules) {
+            Integer startPort = rule.getSourcePortStart();
+            Integer endPort = rule.getSourcePortEnd();
+            s_logger.debug("Network rule : " + startPort + " " + endPort);
+            if (startPort <= 443 && 443 <= endPort) {
+                throw new InvalidParameterValueException("The network id:" + network.getId() + " has conflicting firewall rules to provision" +
+                        " container cluster." );
+            }
+        }
+
+        rules= _firewallDao.listByIpAndPurposeAndNotRevoked(sourceNatIp.getId(), FirewallRule.Purpose.PortForwarding);
+        for (FirewallRuleVO rule : rules) {
+            Integer startPort = rule.getSourcePortStart();
+            Integer endPort = rule.getSourcePortEnd();
+            s_logger.debug("Network rule : " + startPort + " " + endPort);
+            if (startPort <= 443 && 443 <= endPort) {
+                throw new InvalidParameterValueException("The network id:" + network.getId() + " has conflicting port forwarding rules to provision" +
+                        " container cluster." );
+            }
         }
         return true;
     }
