@@ -46,13 +46,16 @@ import com.cloud.network.Network.Service;
 import com.cloud.network.NetworkModel;
 import com.cloud.network.NetworkService;
 import com.cloud.network.PhysicalNetwork;
+import com.cloud.network.dao.FirewallRulesDao;
 import com.cloud.network.dao.IPAddressDao;
 import com.cloud.network.dao.IPAddressVO;
 import com.cloud.network.dao.NetworkDao;
 import com.cloud.network.dao.NetworkVO;
 import com.cloud.network.dao.PhysicalNetworkDao;
 import com.cloud.network.firewall.FirewallService;
+import com.cloud.network.IpAddress;
 import com.cloud.network.rules.FirewallRule;
+import com.cloud.network.rules.FirewallRuleVO;
 import com.cloud.network.rules.PortForwardingRuleVO;
 import com.cloud.network.rules.RulesService;
 import com.cloud.network.rules.dao.PortForwardingRulesDao;
@@ -84,6 +87,7 @@ import com.cloud.utils.concurrency.NamedThreadFactory;
 import com.cloud.utils.db.DbProperties;
 import com.cloud.utils.db.Filter;
 import com.cloud.utils.db.GlobalLock;
+import com.cloud.utils.db.SearchCriteria;
 import com.cloud.utils.db.Transaction;
 import com.cloud.utils.db.TransactionCallback;
 import com.cloud.utils.db.TransactionCallbackWithException;
@@ -151,9 +155,13 @@ import java.io.PrintWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.math.BigInteger;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
+import java.net.UnknownHostException;
 import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.Charset;
@@ -263,6 +271,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     protected ClusterDetailsDao _clusterDetailsDao;
     @Inject
     protected ClusterDao _clusterDao;
+    @Inject
+    FirewallRulesDao _firewallDao;
 
     @Override
     public ContainerCluster findById(final Long id) {
@@ -430,7 +440,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     }
 
     // perform a cold start (which will provision resources as well)
-    private boolean startContainerClusterOnCreate(long containerClusterId) throws ManagementServerException {
+    private boolean startContainerClusterOnCreate(final long containerClusterId) throws ManagementServerException {
 
         // Starting a contriner cluster has below workflow
         //   - start the newtwork
@@ -490,6 +500,20 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         UserVm k8sMasterVM = null;
         try {
             k8sMasterVM = createK8SMaster(containerCluster, publicIp);
+
+            final long clusterId = containerCluster.getId();
+            final long masterVmId = k8sMasterVM.getId();
+            Transaction.execute(new TransactionCallback<ContainerClusterVmMapVO>() {
+                @Override
+                public ContainerClusterVmMapVO doInTransaction(TransactionStatus status) {
+                    ContainerClusterVmMapVO newClusterVmMap = new ContainerClusterVmMapVO(clusterId, masterVmId);
+                    _clusterVmMapDao.persist(newClusterVmMap);
+                    return newClusterVmMap;
+                }
+            });
+
+            startK8SVM(k8sMasterVM, containerCluster);
+            k8sMasterVM = _vmDao.findById(k8sMasterVM.getId());
             if (s_logger.isDebugEnabled()) {
                 s_logger.debug("Provisioned the master VM's in to the container cluster name:" + containerCluster.getName());
             }
@@ -503,17 +527,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             throw new ManagementServerException("Provisioning the master VM' failed in the container cluster: " + containerCluster.getName(), e);
         }
 
-        final long clusterId = containerCluster.getId();
-        final long masterVmId = k8sMasterVM.getId();
-        Transaction.execute(new TransactionCallback<ContainerClusterVmMapVO>() {
-            @Override
-            public ContainerClusterVmMapVO doInTransaction(TransactionStatus status) {
-                ContainerClusterVmMapVO newClusterVmMap = new ContainerClusterVmMapVO(clusterId, masterVmId);
-                _clusterVmMapDao.persist(newClusterVmMap);
-                return newClusterVmMap;
-            }
-        });
-
         String masterIP = k8sMasterVM.getPrivateIpAddress();
 
         long anyNodeVmId = 0;
@@ -522,6 +535,18 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             UserVm vm = null;
             try {
                 vm = createK8SNode(containerCluster, masterIP, i);
+                final long nodeVmId = vm.getId();
+                ContainerClusterVmMapVO clusterNodeVmMap = Transaction.execute(new TransactionCallback<ContainerClusterVmMapVO>() {
+                    @Override
+                    public ContainerClusterVmMapVO doInTransaction(TransactionStatus status) {
+                        ContainerClusterVmMapVO newClusterVmMap = new ContainerClusterVmMapVO(containerClusterId, nodeVmId);
+                        _clusterVmMapDao.persist(newClusterVmMap);
+                        return newClusterVmMap;
+                    }
+                });
+                startK8SVM(vm, containerCluster);
+
+                vm = _vmDao.findById(vm.getId());
                 if (s_logger.isDebugEnabled()) {
                     s_logger.debug("Provisioned a node VM in to the container cluster: " + containerCluster.getName());
                 }
@@ -539,23 +564,13 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 anyNodeVmId = vm.getId();
                 k8anyNodeVM = vm;
             }
-
-            final long nodeVmId = vm.getId();
-            ContainerClusterVmMapVO clusterNodeVmMap = Transaction.execute(new TransactionCallback<ContainerClusterVmMapVO>() {
-                @Override
-                public ContainerClusterVmMapVO doInTransaction(TransactionStatus status) {
-                    ContainerClusterVmMapVO newClusterVmMap = new ContainerClusterVmMapVO(clusterId, nodeVmId);
-                    _clusterVmMapDao.persist(newClusterVmMap);
-                    return newClusterVmMap;
-                }
-            });
         }
 
         if (s_logger.isDebugEnabled()) {
             s_logger.debug("Container cluster : " + containerCluster.getName() + " VM's are successfully provisioned.");
         }
 
-        setupContainerClusterNetworkRules(publicIp, account, containerClusterId, masterVmId);
+        setupContainerClusterNetworkRules(publicIp, account, containerClusterId, k8sMasterVM.getId());
 
         int retryCounter = 0;
         int maxRetries = 10;
@@ -676,6 +691,39 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
         }
 
+        InetAddress address=null;
+        try {
+            address = InetAddress.getByName(new URL(containerCluster.getEndpoint()).getHost());
+        } catch (MalformedURLException | UnknownHostException ex) {
+            // API end point is generated by CCS, so this situation should not arise.
+            s_logger.warn("Container cluster id:" + containerClusterId + " has invalid api endpoint. Can not " +
+                    "verify if cluster is in ready state.");
+            throw new ManagementServerException("Can not verify if container cluster id:" + containerClusterId + " is in usable state.");
+        }
+
+        // wait for fixed time for K8S api server to be avaialble
+        int retryCounter = 0;
+        int maxRetries = 10;
+        boolean k8sApiServerSetup = false;
+        while (retryCounter < maxRetries) {
+            try (Socket socket = new Socket()) {
+                socket.connect(new InetSocketAddress(address.getHostAddress(), 443), 10000);
+                k8sApiServerSetup = true;
+                break;
+            } catch (IOException e) {
+                if (s_logger.isDebugEnabled()) {
+                    s_logger.debug("Waiting for container cluster: " + containerCluster.getName() + " API endpoint to be available. retry: " + retryCounter + "/" + maxRetries);
+                }
+                try { Thread.sleep(50000); } catch (InterruptedException ex) {}
+                retryCounter++;
+            }
+        }
+
+        if (!k8sApiServerSetup) {
+            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+            throw new ManagementServerException("Failed to setup container cluster id: " + containerClusterId + " is usable state.");
+        }
+
         stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
         if (s_logger.isDebugEnabled()) {
             s_logger.debug(" Container cluster name:" + containerCluster.getName() + " is successfully started.");
@@ -739,7 +787,26 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         }
 
         Nic masterVmNic = _networkModel.getNicInNetwork(masterVmId, containerCluster.getNetworkId());
-        final Ip masterIpFinal = new Ip(masterVmNic.getIp4Address());
+        // handle Nic interface method change between releases 4.5 and 4.6 and above through reflection
+        Method m = null;
+        try {
+            m = Nic.class.getMethod("getIp4Address");
+        } catch (NoSuchMethodException e1) {
+            try {
+                m = Nic.class.getMethod("getIPv4Address");
+            } catch (NoSuchMethodException e2) {
+                stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+                throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName());
+            }
+        }
+        Ip masterIp = null;
+        try {
+            masterIp = new Ip(m.invoke(masterVmNic).toString());
+        } catch (InvocationTargetException | IllegalAccessException ie) {
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+            throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName());
+        }
+        final Ip masterIpFinal = masterIp;
         final long publicIpId = publicIp.getId();
         final long networkId = containerCluster.getNetworkId();
         final long accountId = account.getId();
@@ -795,6 +862,44 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         }
         if (! _networkModel.areServicesSupportedInNetwork(network.getId(), Service.Dhcp)){
             throw new InvalidParameterValueException("This network does not support dhcp that is required for k8s, network id " + network.getId());
+        }
+
+        List<? extends IpAddress> addrs = _networkModel.listPublicIpsAssignedToGuestNtwk(network.getId(), true);
+        IPAddressVO sourceNatIp = null;
+        if (addrs.isEmpty()) {
+            throw new InvalidParameterValueException("The network id:" + network.getId() + " does not have source NAT ip assoicated with it. " +
+                    "To provision a Container Cluster, a isolated network with source NAT is required." );
+        } else {
+            for (IpAddress addr : addrs) {
+                if (addr.isSourceNat()) {
+                    sourceNatIp = _publicIpAddressDao.findById(addr.getId());
+                }
+            }
+            if (sourceNatIp == null) {
+                throw new InvalidParameterValueException("The network id:" + network.getId() + " does not have source NAT ip assoicated with it. " +
+                        "To provision a Container Cluster, a isolated network with source NAT is required." );
+            }
+        }
+        List<FirewallRuleVO> rules= _firewallDao.listByIpAndPurposeAndNotRevoked(sourceNatIp.getId(), FirewallRule.Purpose.Firewall);
+        for (FirewallRuleVO rule : rules) {
+            Integer startPort = rule.getSourcePortStart();
+            Integer endPort = rule.getSourcePortEnd();
+            s_logger.debug("Network rule : " + startPort + " " + endPort);
+            if (startPort <= 443 && 443 <= endPort) {
+                throw new InvalidParameterValueException("The network id:" + network.getId() + " has conflicting firewall rules to provision" +
+                        " container cluster." );
+            }
+        }
+
+        rules= _firewallDao.listByIpAndPurposeAndNotRevoked(sourceNatIp.getId(), FirewallRule.Purpose.PortForwarding);
+        for (FirewallRuleVO rule : rules) {
+            Integer startPort = rule.getSourcePortStart();
+            Integer endPort = rule.getSourcePortEnd();
+            s_logger.debug("Network rule : " + startPort + " " + endPort);
+            if (startPort <= 443 && 443 <= endPort) {
+                throw new InvalidParameterValueException("The network id:" + network.getId() + " has conflicting port forwarding rules to provision" +
+                        " container cluster." );
+            }
         }
         return true;
     }
@@ -1086,7 +1191,15 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                         Account owner = _accountMgr.getAccount(network.getAccountId());
                         User callerUser = _accountMgr.getActiveUser(CallContext.current().getCallingUserId());
                         ReservationContext context = new ReservationContextImpl(null, null, callerUser, owner);
-                        _networkMgr.destroyNetwork(cluster.getNetworkId(), context, true);
+                        boolean networkDestroyed = _networkMgr.destroyNetwork(cluster.getNetworkId(), context, true);
+                        if (!networkDestroyed) {
+                            if (s_logger.isDebugEnabled()) {
+                                s_logger.debug("Failed to destroy network: " + cluster.getNetworkId() +
+                                        " as part of cluster: " + cluster.getName()+ " destroy");
+                            }
+                            processFailedNetworkDelete(containerClusterId);
+                            throw new ManagementServerException("Failed to delete the network as part of container cluster name:" + cluster.getName() + " clean up");
+                        }
                         if(s_logger.isDebugEnabled()) {
                             s_logger.debug("Destroyed network: " +  network.getName() + " as part of cluster: " + cluster.getName() + " destroy");
                         }
@@ -1096,11 +1209,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                         s_logger.debug("Failed to destroy network: " + cluster.getNetworkId() +
                                 " as part of cluster: " + cluster.getName() + "  destroy due to " + e);
                     }
-                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
-                    cluster = _containerClusterDao.findById(containerClusterId);
-                    cluster.setCheckForGc(true);
-                    _containerClusterDao.update(cluster.getId(), cluster);
-
+                    processFailedNetworkDelete(containerClusterId);
                     throw new ManagementServerException("Failed to delete the network as part of container cluster name:" + cluster.getName() + " clean up");
                 }
             }
@@ -1108,11 +1217,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             if (s_logger.isDebugEnabled()) {
                 s_logger.debug("There are VM's that are not expunged in container cluster " + cluster.getName());
             }
-            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
-            cluster = _containerClusterDao.findById(containerClusterId);
-            cluster.setCheckForGc(true);
-            _containerClusterDao.update(cluster.getId(), cluster);
-
+            processFailedNetworkDelete(containerClusterId);
             throw new ManagementServerException("Failed to destroy one or more VM's as part of container cluster name:" + cluster.getName() + " clean up");
         }
 
@@ -1131,6 +1236,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return true;
     }
 
+    void processFailedNetworkDelete(long containerClusterId) {
+        stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+        ContainerClusterVO cluster = _containerClusterDao.findById(containerClusterId);
+        cluster.setCheckForGc(true);
+        _containerClusterDao.update(cluster.getId(), cluster);
+    }
 
     UserVm createK8SMaster(final ContainerClusterVO containerCluster, final IPAddressVO publicIP) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
@@ -1156,9 +1267,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         try {
             String masterCloudConfig = _globalConfigDao.getValue(CcsConfig.ContainerClusterMasterCloudConfig.key());
             k8sMasterConfig = readFile(masterCloudConfig);
-            SecureRandom random = new SecureRandom();
 
-            final String randomPassword = new BigInteger(130, random).toString(32);
             final String user = "{{ k8s_master.user }}";
             final String password = "{{ k8s_master.password }}";
             final String apiServerCert = "{{ k8s_master.apiserver.crt }}";
@@ -1172,22 +1281,13 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             final String tlsClientCert = x509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, publicIP.getAddress().addr(), true));
             final String tlsPrivateKey = rsaPrivateKeyToPem(keyPair.getPrivate());
 
-            k8sMasterConfig = k8sMasterConfig.replace(password, randomPassword);
-            k8sMasterConfig = k8sMasterConfig.replace(user, "admin");
             k8sMasterConfig = k8sMasterConfig.replace(apiServerCert, tlsClientCert.replace("\n", "\n      "));
             k8sMasterConfig = k8sMasterConfig.replace(apiServerKey, tlsPrivateKey.replace("\n", "\n      "));
             k8sMasterConfig = k8sMasterConfig.replace(caCert, rootCA.getCertificate().replace("\n", "\n      "));
 
-            ContainerClusterDetailsVO cluster = Transaction.execute(new TransactionCallback<ContainerClusterDetailsVO>() {
-
-                @Override
-                public ContainerClusterDetailsVO doInTransaction(TransactionStatus status) {
-                    ContainerClusterDetailsVO clusterDetails = new ContainerClusterDetailsVO(containerCluster.getId(),
-                            "admin", randomPassword);
-                    _containerClusterDetailsDao.persist(clusterDetails);
-                return clusterDetails;
-                }
-            });
+            ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
+            k8sMasterConfig = k8sMasterConfig.replace(password, clusterDetails.getPassword());
+            k8sMasterConfig = k8sMasterConfig.replace(user, clusterDetails.getUserName());
         } catch (RuntimeException e ) {
             s_logger.error("Failed to read kubernetes master configuration file due to " + e);
             throw new ManagementServerException("Failed to read kubernetes master configuration file", e);
@@ -1207,9 +1307,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.debug("Created master VM: " + hostName + " in the container cluster: " + containerCluster.getName());
         }
 
-        startK8SVM(masterVm, containerCluster);
-
-        masterVm = _vmDao.findById(masterVm.getId());
         return masterVm;
     }
 
@@ -1306,9 +1403,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.debug("Created cluster node VM: " + hostName + " in the container cluster: " + containerCluster.getName());
         }
 
-        startK8SVM(nodeVm, containerCluster);
-
-        nodeVm = _vmDao.findById(nodeVm.getId());
         return nodeVm;
     }
 
@@ -1366,33 +1460,47 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         ListResponse<ContainerClusterResponse> response = new ListResponse<ContainerClusterResponse>();
 
         List<ContainerClusterResponse> responsesList = new ArrayList<ContainerClusterResponse>();
+        SearchCriteria<ContainerClusterVO> sc = _containerClusterDao.createSearchCriteria();
+
+        String state = cmd.getState();
+        if (state != null && !state.isEmpty()) {
+            if ( !ContainerCluster.State.Running.toString().equals(state) &&
+                    !ContainerCluster.State.Stopped.toString().equals(state) &&
+                    !ContainerCluster.State.Destroyed.toString().equals(state)) {
+                throw new InvalidParameterValueException("Invalid vlaue for cluster state is specified");
+            }
+        }
 
         if (cmd.getId() != null) {
             ContainerClusterVO cluster = _containerClusterDao.findById(cmd.getId());
             if (cluster == null) {
                 throw new InvalidParameterValueException("Invalid cluster id specified");
             }
-
             _accountMgr.checkAccess(caller, SecurityChecker.AccessType.ListEntry, false, cluster);
-
             responsesList.add(createContainerClusterResponse(cmd.getId()));
         } else {
-            if (_accountMgr.isAdmin(caller.getId())) {
+            Filter searchFilter = new Filter(ContainerClusterVO.class, "id", true, cmd.getStartIndex(), cmd.getPageSizeVal());
 
-                Filter searchFilter = new Filter(ContainerClusterVO.class, "id", true, cmd.getStartIndex(), cmd.getPageSizeVal());
-                List<ContainerClusterVO> containerClusters = _containerClusterDao.listAll(searchFilter);
-                for (ContainerClusterVO cluster : containerClusters) {
-                    ContainerClusterResponse clusterReponse = createContainerClusterResponse(cluster.getId());
-                    responsesList.add(clusterReponse);
-                }
-            } else {
-                List<ContainerClusterVO> containerClusters = _containerClusterDao.listByAccount(caller.getAccountId());
-                for (ContainerClusterVO cluster : containerClusters) {
-                    ContainerClusterResponse clusterReponse = createContainerClusterResponse(cluster.getId());
-                    responsesList.add(clusterReponse);
-                }
+            if (state != null && !state.isEmpty()) {
+                sc.addAnd("state", SearchCriteria.Op.EQ, state);
             }
 
+            if (_accountMgr.isNormalUser(caller.getId())) {
+                sc.addAnd("accountId", SearchCriteria.Op.EQ, caller.getAccountId());
+            } else if (_accountMgr.isDomainAdmin(caller.getId())) {
+                sc.addAnd("domainId", SearchCriteria.Op.EQ, caller.getDomainId());
+            }
+
+            String name = cmd.getName();
+            if (name != null && !name.isEmpty()) {
+                sc.addAnd("name", SearchCriteria.Op.LIKE, name);
+            }
+
+            List<ContainerClusterVO> containerClusters = _containerClusterDao.search(sc, searchFilter);
+            for (ContainerClusterVO cluster : containerClusters) {
+                ContainerClusterResponse clusterReponse = createContainerClusterResponse(cluster.getId());
+                responsesList.add(clusterReponse);
+            }
         }
         response.setResponses(responsesList);
         return response;
