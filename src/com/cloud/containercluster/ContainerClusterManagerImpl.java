@@ -152,6 +152,8 @@ import java.io.PrintWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -781,7 +783,26 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         }
 
         Nic masterVmNic = _networkModel.getNicInNetwork(masterVmId, containerCluster.getNetworkId());
-        final Ip masterIpFinal = new Ip(masterVmNic.getIp4Address());
+        // handle Nic interface method change between releases 4.5 and 4.6 and above through reflection
+        Method m = null;
+        try {
+            m = Nic.class.getMethod("getIp4Address");
+        } catch (NoSuchMethodException e1) {
+            try {
+                m = Nic.class.getMethod("getIPv4Address");
+            } catch (NoSuchMethodException e2) {
+                stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+                throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName());
+            }
+        }
+        Ip masterIp = null;
+        try {
+            masterIp = new Ip(m.invoke(masterVmNic).toString());
+        } catch (InvocationTargetException | IllegalAccessException ie) {
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+            throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName());
+        }
+        final Ip masterIpFinal = masterIp;
         final long publicIpId = publicIp.getId();
         final long networkId = containerCluster.getNetworkId();
         final long accountId = account.getId();
