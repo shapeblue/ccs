@@ -1861,6 +1861,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             Flyway flyway = new Flyway();
             flyway.setDataSource(dbUrl, cloudUsername, cloudPassword);
 
+            // name the meta table as sb_ccs_schema_version
+            flyway.setTable("sb_ccs_schema_version");
+
             // make the existing cloud DB schema and data as baseline
             flyway.setBaselineOnMigrate(true);
             flyway.setBaselineVersionAsString("0");
