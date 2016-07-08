@@ -12,6 +12,21 @@ write-files:
     content: |
       {{ k8s_master.password }},{{ k8s_master.user }},1
 
+  - path: /opt/bin/ca.crt
+    permissions: '0644'
+    content: |
+      {{ k8s_master.ca.crt }}
+
+  - path: /opt/bin/kube-apiserver.crt
+    permissions: '0644'
+    content: |
+      {{ k8s_master.apiserver.crt }}
+
+  - path: /opt/bin/kube-apiserver.key
+    permissions: '0644'
+    content: |
+      {{ k8s_master.apiserver.key }}
+
   - path: /opt/bin/wupiao
     permissions: '0755'
     content: |
@@ -152,7 +167,7 @@ coreos:
         ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-apiserver
         ExecStartPre=/opt/bin/wupiao 127.0.0.1:2379/v2/machines
         ExecStart=/opt/bin/kube-apiserver \
-        --service-account-key-file=/opt/bin/kube-serviceaccount.key \
+        --service-account-key-file=/opt/bin/kube-apiserver.key \
         --service-account-lookup=false \
         --basic-auth-file=/srv/kubernetes/basicauth.csv \
         --admission-control=NamespaceLifecycle,NamespaceAutoProvision,LimitRanger,SecurityContextDeny,ServiceAccount,ResourceQuota \
@@ -160,6 +175,9 @@ coreos:
         --allow-privileged=true \
         --insecure-port=8080 \
         --secure-port=443 \
+        --client-ca-file=/opt/bin/ca.crt \
+        --tls-cert-file=/opt/bin/kube-apiserver.crt \
+        --tls-private-key-file=/opt/bin/kube-apiserver.key \
         --service-cluster-ip-range=10.0.0.0/16 \
         --etcd-servers=http://127.0.0.1:2379 \
         --bind-address=0.0.0.0 \
@@ -180,8 +198,8 @@ coreos:
         ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-controller-manager -z /opt/bin/kube-controller-manager https://storage.googleapis.com/kubernetes-release/release/v1.2.4/bin/linux/amd64/kube-controller-manager
         ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-controller-manager
         ExecStart=/opt/bin/kube-controller-manager \
-        --service-account-private-key-file=/opt/bin/kube-serviceaccount.key \
-        --root-ca-file=/var/run/kubernetes/apiserver.crt \
+        --service-account-private-key-file=/opt/bin/kube-apiserver.key \
+        --root-ca-file=/opt/bin/ca.crt \
         --master=127.0.0.1:8080 \
         --logtostderr=true
         Restart=always

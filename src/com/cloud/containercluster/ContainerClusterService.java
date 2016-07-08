@@ -37,7 +37,11 @@ public interface ContainerClusterService extends PluggableService {
                                             Account owner,
                                             Long networkId,
                                             String sshKeyPair,
-                                            Long nodeCount
+                                            Long nodeCount,
+                                            String dockerRegistryUsername,
+                                            String dockerRegistryPassword,
+                                            String dockerRegistryUrl,
+                                            String dockerRegistryEmail
                                             ) throws InsufficientCapacityException,
                      ResourceAllocationException, ManagementServerException;
 

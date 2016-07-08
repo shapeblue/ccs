@@ -18,5 +18,8 @@
 package com.cloud.containercluster;
 
 public interface ContainerClusterManager extends ContainerClusterService {
-
+    String CCS_ROOTCA_KEYPAIR = "CCS_ROOTCA_KEYPAIR";
+    String CCS_ROOTCA_CN = "CN=cloudstack";
+    String CCS_CLUSTER_CN = "CN=containercluster.cloudstack";
+    String CCS_RSA_PRIVATE_KEY = "RSA PRIVATE KEY";
 }

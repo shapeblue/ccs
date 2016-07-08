@@ -36,6 +36,7 @@ import org.apache.cloudstack.api.ApiCommandJobType;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
 import org.apache.cloudstack.api.BaseAsyncCreateCmd;
+import org.apache.cloudstack.api.CcsApiConstants;
 import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ResponseObject.ResponseView;
 import org.apache.cloudstack.api.ServerApiException;
@@ -110,6 +111,22 @@ public class CreateContainerClusterCmd extends BaseAsyncCreateCmd {
     @Parameter(name=ApiConstants.SIZE, type = CommandType.LONG,
             required = true, description = "number of container cluster nodes")
     private Long clusterSize;
+
+    @Parameter(name = CcsApiConstants.DOCKER_REGISTRY_USER_NAME, type = CommandType.STRING,
+            description = "user name for the docker image private registry")
+    private String dockerRegistryUserName;
+
+    @Parameter(name = CcsApiConstants.DOCKER_REGISTRY_PASSWORD, type = CommandType.STRING,
+            description = "password for the docker image private registry")
+    private String dockerRegistryPassword;
+
+    @Parameter(name = CcsApiConstants.DOCKER_REGISTRY_URL, type = CommandType.STRING,
+            description = "URL for the docker image private registry")
+    private String dockerRegistryUrl;
+
+    @Parameter(name = CcsApiConstants.DOCKER_REGISTRY_EMAIL, type = CommandType.STRING,
+            description = "email of the docker image private registry user")
+    private String dockerRegistryEmail;
 
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
@@ -239,7 +256,8 @@ public class CreateContainerClusterCmd extends BaseAsyncCreateCmd {
             Account owner = _accountService.getActiveAccountById(getEntityOwnerId());
 
             ContainerCluster cluster = _containerClusterService.createContainerCluster(name,
-                    description, zoneId, serviceOfferingId, owner, networkId, sshKeyPairName, clusterSize);
+                    description, zoneId, serviceOfferingId, owner, networkId, sshKeyPairName, clusterSize,
+                    dockerRegistryUserName, dockerRegistryPassword, dockerRegistryUrl, dockerRegistryEmail);
 
             if (cluster != null) {
                 setEntityId(cluster.getId());

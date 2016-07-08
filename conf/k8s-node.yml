@@ -9,6 +9,22 @@ write-files:
         --silent --head --fail \
         http://${1}:${2}; do sleep 1 && echo -n .; done;
       exit $?
+
+  - path: /opt/bin/ca.crt
+    permissions: '0644'
+    content: |
+      {{ k8s_node.ca.crt }}
+
+  - path: /opt/bin/kubelet.crt
+    permissions: '0644'
+    content: |
+      {{ k8s_node.client.crt }}
+
+  - path: /opt/bin/kubelet.key
+    permissions: '0644'
+    content: |
+      {{ k8s_node.client.key }}
+
 coreos:
   etcd2:
     listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
@@ -86,6 +102,8 @@ coreos:
         --cluster-domain=cluster.local \
         --hostname-override=${DEFAULT_IPV4} \
         --api-servers={{ k8s_master.default_ip }}:8080 \
+        --tls-cert-file=/opt/bin/kubelet.crt \
+        --tls-private-key-file=/opt/bin/kubelet.key \
         --allow-privileged=true \
         --logtostderr=true \
         --cadvisor-port=4194 \

@@ -21,7 +21,7 @@ import com.cloud.containercluster.ContainerCluster;
 import com.cloud.serializer.Param;
 import com.google.gson.annotations.SerializedName;
 import org.apache.cloudstack.api.ApiConstants;
-import org.apache.cloudstack.api.CcpApiConstants;
+import org.apache.cloudstack.api.CcsApiConstants;
 import org.apache.cloudstack.api.BaseResponse;
 import org.apache.cloudstack.api.EntityReference;
 
@@ -241,7 +241,7 @@ public class ContainerClusterResponse extends BaseResponse implements Controlled
     @Param(description = "URL end point for the cluster")
     private String endpoint;
 
-    @SerializedName(CcpApiConstants.CONSOLE_END_POINT)
+    @SerializedName(CcsApiConstants.CONSOLE_END_POINT)
     @Param(description = "URL end point for the cluster UI")
     private String consoleendpoint;
 
@@ -249,7 +249,7 @@ public class ContainerClusterResponse extends BaseResponse implements Controlled
     @Param(description = "the list of virtualmachine ids associated with this container cluster")
     private List<String> virtualMachineIds;
 
-    @SerializedName(ApiConstants.USER_ID)
+    @SerializedName(ApiConstants.USERNAME)
     @Param(description = "Username with which container cluster is setup")
     private String username;
 
