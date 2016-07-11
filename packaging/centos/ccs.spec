@@ -19,8 +19,8 @@ Release:   %{_rel}
 
 Version:   %{_ver}
 License:   ShapeBlue License
-Vendor:    ShapeBlue Engineering <engineering@shapeblue.com>
-Packager:  ShapeBlue Engineering <engineering@shapeblue.com>
+Vendor:    Shape Blue Ltd <CCS-help@shapeblue.com>
+Packager:  Shape Blue Ltd <CCS-help@shapeblue.com>
 Group:     System Environment/Libraries
 Source0:   %{name}-%{_maventag}.tgz
 BuildRoot: %{_tmppath}/%{name}-%{_maventag}-%{release}-build
