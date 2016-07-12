@@ -1,4 +1,4 @@
-Source: cloudstack-ccs
+Source: shapeblue-ccs
 Section: libs
 Priority: extra
 Maintainer: Shape Blue Ltd <CCS-help@shapeblue.com>
@@ -6,7 +6,7 @@ Build-Depends: debhelper (>= 7), openjdk-7-jdk | openjdk-8-jdk, maven3 | maven (
 Standards-Version: 3.8.1
 Homepage: http://packages.shapeblue.com/
 
-Package: cloudstack-ccs
+Package: shapeblue-ccs
 Architecture: all
 Depends: cloudstack-management (>= 4.5.0)
 Description: CloudStack Container Service Plugin
