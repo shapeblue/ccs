@@ -4,8 +4,8 @@
 # DISABLE the post-percentinstall java repacking and line number stripping
 # we need to find a way to just disable the java repacking and line number stripping, but not the autodeps
 
-Name:      cloudstack
-Summary:   CloudStack Container Service Plugin
+Name:      shapeblue
+Summary:   ShapeBlue CloudStack Container Service Plugin
 #http://fedoraproject.org/wiki/PackageNamingGuidelines#Pre-Release_packages
 %if "%{?_prerelease}" != ""
 %define _maventag %{_ver}-SNAPSHOT
@@ -29,14 +29,14 @@ BuildRoot: %{_tmppath}/%{name}-%{_maventag}-%{release}-build
 CloudStack Container Service plugin by ShapeBlue.
 
 %package ccs
-Summary:   CloudStack Container Service Plugin
+Summary:   ShapeBlue CloudStack Container Service Plugin
 Requires: %{name}-management >= 4.5.0
 Group:     System Environment/Libraries
 %description ccs
 The CloudStack Container Service Plugin by ShapeBlue.
 
 %prep
-echo "Starting CloudStack CCS build..."
+echo "Starting ShapeBlue CCS build..."
 
 %setup -q -n %{name}-%{_maventag}
 
@@ -46,7 +46,7 @@ echo "Executing maven packaging..."
 mvn clean package
 
 %install
-echo "Installing Cloudstack Container Service Plugin"
+echo "Installing ShapeBlue Cloudstack Container Service Plugin"
 [ ${RPM_BUILD_ROOT} != "/" ] && rm -rf ${RPM_BUILD_ROOT}
 mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib
 mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/plugins
@@ -54,7 +54,7 @@ mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup
 mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
 mkdir -p ${RPM_BUILD_ROOT}%{_bindir}/
 
-cp -r target/cloud-plugin-ccs-%{_maventag}.jar ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib/
+cp -r target/cloud-plugin-shapeblue-ccs-%{_maventag}.jar ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib/
 cp -r ../../../../ui/plugins/ccs ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/plugins/
 cp -r ../../../../schema/delete-schema-ccs.sql ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup/delete-schema-ccs.sql
 cp -r ../../../../conf/* ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
@@ -109,5 +109,5 @@ fi
 %{_bindir}/ccs-template-install
 %{_bindir}/kubectl
 %changelog
-* Fri Jun 03 2016 ShapeBlue <enginering@shapeblue.com> 1.0.0
+* Mon Jul 11 2016 Shape Blue Ltd <CCS-help@shapeblue.com> 1.0.0
 - CloudStack Container Service Plugin

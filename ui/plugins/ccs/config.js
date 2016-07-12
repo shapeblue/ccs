@@ -8,7 +8,7 @@
     title: 'Container Service',
     desc: 'Container Service',
     externalLink: 'http://shapeblue.com/',
-    authorName: 'ShapeBlue Engineering',
-    authorEmail: 'engineering@shapeblue.com'
+    authorName: 'Shape Blue Ltd',
+    authorEmail: 'CCS-help@shapeblue.com'
   };
 }(cloudStack));

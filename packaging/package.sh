@@ -7,7 +7,7 @@ function package_deb() {
 function package_rpm() {
     CWD=`pwd`
     RPMDIR=$CWD/../dist/rpmbuild
-    PACK_PROJECT=cloudstack
+    PACK_PROJECT=shapeblue
 
     VERSION=`(cd ../; mvn org.apache.maven.plugins:maven-help-plugin:2.1.1:evaluate -Dexpression=project.version) | grep --color=none '^[0-9]\.'`
     if echo $VERSION | grep -q SNAPSHOT ; then

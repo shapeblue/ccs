@@ -14,6 +14,7 @@ DEBVERS := $(shell dpkg-parsechangelog | sed -n -e 's/^Version: //p')
 VERSION := $(shell cat ../pom.xml | sed '24!d' | cut -d'>' -f2 | cut -d'<' -f1)
 MVNADD := $(shell if echo '$(DEBVERS)' | grep -q snapshot; then echo ; fi )
 PACKAGE = $(shell dh_listpackages|head -n 1|cut -d '-' -f 1)
+CLOUDSTACK = "cloudstack"
 SYSCONFDIR = "/etc"
 USRBINDIR = "/usr/bin"
 DESTDIR = "debian/tmp"
@@ -48,22 +49,22 @@ install:
 	dh_prep -s
 
 	# Common packages
-	mkdir -p $(DESTDIR)/$(SYSCONFDIR)/$(PACKAGE)
+	mkdir -p $(DESTDIR)/$(SYSCONFDIR)/$(CLOUDSTACK)
 	mkdir -p $(DESTDIR)/usr/share
 	mkdir -p $(DESTDIR)/usr/bin
 
-	# cloudstack-ccs
-	mkdir $(DESTDIR)/$(SYSCONFDIR)/$(PACKAGE)/management
-	mkdir -p $(DESTDIR)/usr/share/$(PACKAGE)-management/webapps/client/WEB-INF/lib
-	mkdir -p $(DESTDIR)/usr/share/$(PACKAGE)-management/webapps/client/plugins
-	mkdir -p $(DESTDIR)/usr/share/$(PACKAGE)-management/setup
-	cp ../target/cloud-plugin-ccs-$(VERSION)$(MVNADD).jar $(DESTDIR)/usr/share/$(PACKAGE)-management/webapps/client/WEB-INF/lib/
-	cp -r ../ui/plugins/ccs $(DESTDIR)/usr/share/$(PACKAGE)-management/webapps/client/plugins/
-	cp -r ../schema/delete-schema-ccs.sql $(DESTDIR)/usr/share/$(PACKAGE)-management/setup/
-	cp -r ../conf/* $(DESTDIR)/$(SYSCONFDIR)/$(PACKAGE)/management/
+	# shapeblue-ccs
+	mkdir $(DESTDIR)/$(SYSCONFDIR)/$(CLOUDSTACK)/management
+	mkdir -p $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapps/client/WEB-INF/lib
+	mkdir -p $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapps/client/plugins
+	mkdir -p $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/setup
+	cp ../target/cloud-plugin-shapeblue-ccs-$(VERSION)$(MVNADD).jar $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapps/client/WEB-INF/lib/
+	cp -r ../ui/plugins/ccs $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapps/client/plugins/
+	cp -r ../schema/delete-schema-ccs.sql $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/setup/
+	cp -r ../conf/* $(DESTDIR)/$(SYSCONFDIR)/$(CLOUDSTACK)/management/
 	cp -r ../scripts/setup/* $(DESTDIR)/$(USRBINDIR)/
 	cp ../deps/kubectl $(DESTDIR)/$(USRBINDIR)/
-	cp ../target/dependency/flyway-core-*.jar $(DESTDIR)/usr/share/$(PACKAGE)-management/webapps/client/WEB-INF/lib/
+	cp ../target/dependency/flyway-core-*.jar $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapps/client/WEB-INF/lib/
 
 	dh_installdirs
 	dh_install
