@@ -30,7 +30,7 @@ CloudStack Container Service plugin by ShapeBlue.
 
 %package ccs
 Summary:   ShapeBlue CloudStack Container Service Plugin
-Requires: %{name}-management >= 4.5.0
+Requires: cloudstack-management >= 4.5.0
 Group:     System Environment/Libraries
 %description ccs
 The CloudStack Container Service Plugin by ShapeBlue.
@@ -48,19 +48,19 @@ mvn clean package
 %install
 echo "Installing ShapeBlue Cloudstack Container Service Plugin"
 [ ${RPM_BUILD_ROOT} != "/" ] && rm -rf ${RPM_BUILD_ROOT}
-mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib
-mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/plugins
-mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup
-mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
+mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapps/client/WEB-INF/lib
+mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapps/client/plugins
+mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/setup
+mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/cloudstack/management
 mkdir -p ${RPM_BUILD_ROOT}%{_bindir}/
 
-cp -r target/cloud-plugin-shapeblue-ccs-%{_maventag}.jar ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib/
-cp -r ../../../../ui/plugins/ccs ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/plugins/
-cp -r ../../../../schema/delete-schema-ccs.sql ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/setup/delete-schema-ccs.sql
-cp -r ../../../../conf/* ${RPM_BUILD_ROOT}%{_sysconfdir}/%{name}/management
+cp -r target/cloud-plugin-shapeblue-ccs-%{_maventag}.jar ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapps/client/WEB-INF/lib/
+cp -r ../../../../ui/plugins/ccs ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapps/client/plugins/
+cp -r ../../../../schema/delete-schema-ccs.sql ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/setup/delete-schema-ccs.sql
+cp -r ../../../../conf/* ${RPM_BUILD_ROOT}%{_sysconfdir}/cloudstack/management
 cp -r ../../../../scripts/setup/* ${RPM_BUILD_ROOT}%{_bindir}/
 cp ../../../../deps/kubectl ${RPM_BUILD_ROOT}%{_bindir}/
-cp target/dependency/flyway-core-*.jar ${RPM_BUILD_ROOT}%{_datadir}/%{name}-management/webapps/client/WEB-INF/lib/
+cp target/dependency/flyway-core-*.jar ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapps/client/WEB-INF/lib/
 
 %clean
 [ ${RPM_BUILD_ROOT} != "/" ] && rm -rf ${RPM_BUILD_ROOT}
@@ -102,9 +102,9 @@ fi
 
 %files ccs
 %defattr(-,root,root,-)
-%{_datadir}/%{name}-management/webapps
-%{_datadir}/%{name}-management/setup/delete-schema-ccs.sql
-%{_sysconfdir}/%{name}/management/*.yml
+%{_datadir}/cloudstack-management/webapps
+%{_datadir}/cloudstack-management/setup/delete-schema-ccs.sql
+%{_sysconfdir}/cloudstack/management/*.yml
 %{_bindir}/ccs-cleanup-database
 %{_bindir}/ccs-template-install
 %{_bindir}/kubectl
