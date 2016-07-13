@@ -147,13 +147,21 @@ if args.secretfile is None:
 else:
     secret_key=getFileContent(args.secretfile)
 
+# checks if template is ready in all the zones. If template is not ready returns details of zone name and 
+# status of the template in first found zone in which template is not ready
 def is_template_ready(template_id):
+
+    # listTemplates retruns the status of the template in all zones
     list_template_request = {'id': template_id, 'templatefilter': 'self'}
     list_template_response = api.listTemplates(list_template_request)
+
+    # loop through the status of template in each zone
     for count in range(0, list_template_response["count"]):
        if not list_template_response["template"][count]["isready"]:
-           return (False, list_template_response["template"][count]["zonename"])
-    return (True, None)
+           return (False, list_template_response["template"][count]["zonename"],\
+           list_template_response["template"][count]["status"])
+
+    return (True, None, None)
 
 name = 'ShapeBlue-CCS-Template'
 displaytext = 'ShapeBlue-CCS-Template'
@@ -183,11 +191,13 @@ try:
 
     template_ready = False
     while (not template_ready):
-        (template_ready, zone) = is_template_ready(template_id)
+        (template_ready, zone, template_status) = is_template_ready(template_id)
         if not template_ready:
+            if not template_status:
+                template_status = "Install not started"
             print "Template for ShapeBlue CloudStack Container Service is still not avaialble in zone:" \
-                    + zone + ". Waiting for template to be available in the zone"
-            time.sleep(60)
+                    + zone + ". Status of the template is " + template_status
+            time.sleep(30)
 
     print "Template for ShapeBlue CloudStack Container Service is successfully installed in all zones."
 
