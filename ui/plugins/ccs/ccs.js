@@ -501,7 +501,8 @@
                                     },
                                     action: function(args) {
                                         var data = {
-                                            id: args.context.containerclusters[0].id
+                                            id: args.context.containerclusters[0].id,
+                                            expunge: true
                                         };
                                         $.ajax({
                                             url: createURL('deleteContainerCluster'),
@@ -511,7 +512,10 @@
                                             success: function(json) {
                                                 args.response.success({
                                                     _custom: {
-                                                        jobId: json.deletecontaierclusterresponse.jobid
+                                                        jobId: json.deletecontaierclusterresponse.jobid,
+                                                        getUpdatedItem: function(json) {
+                                                            return { 'toRemove': true };
+                                                        }
                                                     }
                                                 });
                                             }
