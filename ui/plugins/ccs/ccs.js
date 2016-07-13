@@ -501,11 +501,9 @@
                                     },
                                     action: function(args) {
                                         var data = {
-                                            id: args.context.containerclusters[0].id
-                                        };
-                                        $.extend(data, {
+                                            id: args.context.containerclusters[0].id,
                                             expunge: true
-                                        });
+                                        };
                                         $.ajax({
                                             url: createURL('deleteContainerCluster'),
                                             data: data,
