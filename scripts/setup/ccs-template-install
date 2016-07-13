@@ -11,6 +11,8 @@ import argparse
 import httplib
 from urlparse import urlparse
 import getpass
+import time
+
 from uuid import UUID
 
 def checkUrl(url):
@@ -83,13 +85,13 @@ class CloudStack(SignedAPICall):
         data = self._http_get(self.value)
         # The response is of the format {commandresponse: actual-data}
         key = command.lower() + "response"
-        print data
         return json.loads(data)[key]
 
 
 usage = """ccs-template-install -h hypervisor [ -u url ] -e [ -a apifile ] [ -k keyfile ] [ -s secretfile]
 
-Registers a template of the given format and for the given hypervisor available at specified url with CloudStack. If template at url is extractable set --extractable to true"""
+Registers a template of the given format and for the given hypervisor available at specified url with CloudStack.\
+        If template at url is extractable set --extractable to true"""
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-m", "--hypervisor", dest="hypervisor", help="Hypervisor type", required=True)
@@ -104,7 +106,12 @@ args = parser.parse_args()
 package_url='http://downloads.shapeblue.com/ccs/1.0/templates/'
 hypervisors = ['XenServer', 'KVM', 'VMware', 'HyperV', 'OVM']
 image_formats = { 'XenServer': 'VHD', 'KVM' : 'QCOW2', 'HyperV' : 'VMDK',  'OVM' : 'RAW', 'VMware' : 'OVA' }
-url_name = { 'XenServer': 'coreos-1010.5.0-xen.shapeblue.vhd.bz2', 'KVM' : 'coreos-1010.5.0-kvm.shapeblue.qcow2.bz2', 'HyperV' : 'None',  'OVM' : 'None', 'VMware' : 'coreos-1010.5.0-vmware.shapeblue.ova' }
+url_name = {\
+        'XenServer': 'coreos-1010.5.0-xen.shapeblue.vhd.bz2',\
+        'KVM' : 'coreos-1010.5.0-kvm.shapeblue.qcow2.bz2',\
+        'HyperV' : 'None',\
+        'OVM' : 'None',\
+        'VMware' : 'coreos-1010.5.0-vmware.shapeblue.ova' }
 
 format = None
 
@@ -140,21 +147,59 @@ if args.secretfile is None:
 else:
     secret_key=getFileContent(args.secretfile)
 
+# checks if template is ready in all the zones. If template is not ready returns details of zone name and 
+# status of the template in first found zone in which template is not ready
+def is_template_ready(template_id):
+
+    # listTemplates retruns the status of the template in all zones
+    list_template_request = {'id': template_id, 'templatefilter': 'self'}
+    list_template_response = api.listTemplates(list_template_request)
+
+    # loop through the status of template in each zone
+    for count in range(0, list_template_response["count"]):
+       if not list_template_response["template"][count]["isready"]:
+           return (False, list_template_response["template"][count]["zonename"],\
+           list_template_response["template"][count]["status"])
+
+    return (True, None, None)
+
 name = 'ShapeBlue-CCS-Template'
 displaytext = 'ShapeBlue-CCS-Template'
 
 api = CloudStack(api_url, api_key, secret_key)
 try:
+    print "Installing ShapeBlue CloudStack Container Service template across all zones."
+
     request = {}
-    zone_result = api.listZones(request)
-    for count in range(0, zone_result["count"]):
-        try:
-            zoneid = zone_result["zone"][count]["id"]
-            request = {'name': name, 'displaytext': displaytext, 'format': format, 'hypervisor': args.hypervisor, 'ostypeid': '255', 'url': args.url, 'zoneid': zoneid, 'isextractable': args.extractable, 'ispublic':'true', 'isfeatured':'true'}
-            result = api.registerTemplate(request)
-        except:
-            continue
-        
-    print "Template for ShapeBlue CloudStack Container Service is successfully installed"
+    register_template_result = None
+    try:
+        request = {'name': name,\
+                'displaytext': displaytext,\
+                'format': format, \
+                'hypervisor': args.hypervisor,\
+                'ostypeid': '255',\
+                'url': args.url,\
+                'zoneid': '-1',\
+                'isextractable': args.extractable,\
+                'ispublic':'true',\
+                'isfeatured':'true'}
+        register_template_result = api.registerTemplate(request)
+    except Exception as e:
+        print "Failed to register template for ShapeBlue CloudStack Container Service due to :" + str(e)
+
+    template_id = register_template_result["template"][0]["id"]
+
+    template_ready = False
+    while (not template_ready):
+        (template_ready, zone, template_status) = is_template_ready(template_id)
+        if not template_ready:
+            if not template_status:
+                template_status = "Install not started"
+            print "Template for ShapeBlue CloudStack Container Service is still not avaialble in zone:" \
+                    + zone + ". Status of the template is " + template_status
+            time.sleep(30)
+
+    print "Template for ShapeBlue CloudStack Container Service is successfully installed in all zones."
+
 except Exception as e:
     print "Failed to register template for ShapeBlue CloudStack Container Service due to :" + str(e)
