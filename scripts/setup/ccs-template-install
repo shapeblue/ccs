@@ -151,7 +151,6 @@ def is_template_ready(template_id):
     list_template_request = {'id': template_id, 'templatefilter': 'self'}
     list_template_response = api.listTemplates(list_template_request)
     for count in range(0, list_template_response["count"]):
-       print type(list_template_response["template"][count]["isready"])
        if not list_template_response["template"][count]["isready"]:
            return (False, list_template_response["template"][count]["zonename"])
     return (True, None)
