@@ -92,15 +92,15 @@
                         // List view actions
                         actions: {
                             showCACert: {
-                                label: 'Cluster Root CA Certificate',
+                                label: 'Download Cluster Root CA Certificate',
                                 isHeader: true,
                                 messages: {
                                     notification: function(args) {
-                                        return 'Cluster Root CA Certificate';
+                                        return 'Download Cluster Root CA Certificate';
                                     }
                                 },
                                 createForm: {
-                                    title: 'Cluster Root CA Certificate',
+                                    title: 'Download Cluster Root CA Certificate?',
                                     fields: {
                                         certificate: {
                                             label: 'label.certificate',
