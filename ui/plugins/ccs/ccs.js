@@ -6,6 +6,20 @@
 (function (cloudStack) {
 
     var rootCaCert = "";
+    var downloadCaCert = function() {
+        var blob = new Blob([rootCaCert], {type: 'application/x-x509-ca-cert'});
+        var filename = "cloudstack-containerservice.pem";
+        if(window.navigator.msSaveOrOpenBlob) {
+            window.navigator.msSaveBlob(blob, filename);
+        } else{
+            var elem = window.document.createElement('a');
+            elem.href = window.URL.createObjectURL(blob);
+            elem.download = filename;
+            document.body.appendChild(elem)
+            elem.click();
+            document.body.removeChild(elem);
+        }
+    };
     cloudStack.plugins.ccs = function(plugin) {
         plugin.ui.addSection({
             id: 'ccs',
@@ -92,15 +106,15 @@
                         // List view actions
                         actions: {
                             showCACert: {
-                                label: 'Download Cluster Root CA Certificate',
+                                label: 'Download CA Certificate',
                                 isHeader: true,
                                 messages: {
                                     notification: function(args) {
-                                        return 'Download Cluster Root CA Certificate';
+                                        return 'Download Container Service Root CA Certificate';
                                     }
                                 },
                                 createForm: {
-                                    title: 'Download Cluster Root CA Certificate?',
+                                    title: 'Download Container Service Root CA Certificate?',
                                     fields: {
                                         certificate: {
                                             label: 'label.certificate',
@@ -120,18 +134,7 @@
                                     }
                                 },
                                 action: function(args) {
-                                    var blob = new Blob([rootCaCert], {type: 'application/x-x509-ca-cert'});
-                                    var filename = "cloudstack-containerservice.pem";
-                                    if(window.navigator.msSaveOrOpenBlob) {
-                                        window.navigator.msSaveBlob(blob, filename);
-                                    } else{
-                                        var elem = window.document.createElement('a');
-                                        elem.href = window.URL.createObjectURL(blob);
-                                        elem.download = filename;
-                                        document.body.appendChild(elem)
-                                        elem.click();
-                                        document.body.removeChild(elem);
-                                    }
+                                    downloadCaCert();
                                     args.response.success({});
                                 },
                             },
@@ -599,20 +602,70 @@
                                 console : {
                                     title: 'Dashboard',
                                     custom : function (args) {
-                                        var endPoint = args.context.containerclusters[0].consoleendpoint;
-                                        var username = args.context.containerclusters[0].username;
-                                        var password = args.context.containerclusters[0].password;
-                                        var protocol = endPoint.split("://")[0] + "://";
-                                        var uri = endPoint.split("://")[1];
+                                        var showDashboard = function() {
+                                            var endPoint = args.context.containerclusters[0].consoleendpoint;
+                                            var username = args.context.containerclusters[0].username;
+                                            var password = args.context.containerclusters[0].password;
+                                            var protocol = endPoint.split("://")[0] + "://";
+                                            var uri = endPoint.split("://")[1];
 
-                                        var dashboardUrl = endPoint;
-                                        if (username && password && endPoint) {
-                                            dashboardUrl = protocol + username + ":" + password + "@" + uri;
+                                            if (!endPoint) {
+                                                return jQuery('<br><p>').html("Container cluster setup is under progress, please check again in few minutes.");
+                                            }
+
+                                            var dashboardUrl = endPoint;
+                                            if (username && password && endPoint) {
+                                                dashboardUrl = protocol + username + ":" + password + "@" + uri;
+                                            }
+                                            var popOut = '<p align="right"><a href="' + dashboardUrl + '" target="_blank">Pop-out ↗</a></p>';
+                                            var iframe = popOut + '<iframe src="';
+                                            var iframeArgs = '" width="770" height="560")>';
+                                            return jQuery(iframe.concat(dashboardUrl, iframeArgs));
+                                        };
+
+                                        var showNotice = function(msg) {
+                                            var msg = "The dashboard gives a GUI that allows you to deploy your containerized applications within your container clusters using Kubernetes. In order to be able to access the dashboard from your browser, you need to import the container cluster root CA certificate in your browser.";
+                                            var links = [
+                                                {name: 'Chrome on Windows', url: 'https://support.globalsign.com/customer/portal/articles/1211541-install-client-digital-certificate---windows-using-chrome'},
+                                                {name: 'Firefox on Windows', url: 'https://support.globalsign.com/customer/portal/articles/1211486-install-client-digital-certificate---firefox-for-windows'},
+                                                {name: 'IE on Windows', url: 'https://msdn.microsoft.com/en-us/library/cc750534.aspx'}
+                                            ];
+                                            var linkMessage = $('<br><br><span>').html("You may use the following links for step-by-step instructions on importing root CA certificate in following browsers:");
+                                            $.each(links, function(idx, item) {
+                                                linkMessage.append($('<br><br><a href="' + item.url + '">').html(item.name));
+                                            });
+                                            return $(
+                                                $('<span>').addClass('message').html(msg)
+                                            ).dialog({
+                                                title: "Have you installed CA certificate?",
+                                                dialogClass: args.isWarning ? 'confirm warning': 'confirm',
+                                                closeOnEscape: false,
+                                                zIndex: 5000,
+                                                buttons: [{
+                                                    text: "I've imported the certificate",
+                                                    'class': 'cancel',
+                                                    'style': 'height: 40px',
+                                                    click: function() {
+                                                        $.cookie('ccs.show.cacert.msg', '1');
+                                                        $(this).dialog('destroy');
+                                                        $('div.overlay').remove();
+                                                        $('.hovered-elem').hide();
+                                                    }
+                                                }, {
+                                                    text: "Download CA Certificate",
+                                                    'class': 'ok',
+                                                    'style': 'height: 40px',
+                                                    click: function() {
+                                                        downloadCaCert();
+                                                    }
+                                                }]
+                                            }).closest('.ui-dialog').overlay();
+                                        };
+
+                                        if (!$.cookie('ccs.show.cacert.msg')) {
+                                          showNotice();
                                         }
-                                        var popOut = '<p align="right"><a href="' + dashboardUrl + '" target="_blank">Pop-out ↗</a></p>';
-                                        var iframe = popOut + '<iframe src="';
-                                        var iframeArgs = '" width="770" height="560")>';
-                                        return jQuery(iframe.concat(dashboardUrl, iframeArgs));
+                                        return showDashboard();
                                     }
                                 },
                                 clusterinstances: {
