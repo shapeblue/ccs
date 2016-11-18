@@ -18,9 +18,9 @@ Release:   %{_rel}
 %{!?python_sitearch: %define python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
 
 Version:   %{_ver}
-License:   ShapeBlue License
-Vendor:    Shape Blue Ltd <CCS-help@shapeblue.com>
-Packager:  Shape Blue Ltd <CCS-help@shapeblue.com>
+License:   Apache License, Version 2
+Vendor:    ShapeBlue Ltd <CCS-help@shapeblue.com>
+Packager:  ShapeBlue Ltd <CCS-help@shapeblue.com>
 Group:     System Environment/Libraries
 Source0:   %{name}-%{_maventag}.tgz
 BuildRoot: %{_tmppath}/%{name}-%{_maventag}-%{release}-build
@@ -30,7 +30,7 @@ CloudStack Container Service plugin by ShapeBlue.
 
 %package ccs
 Summary:   ShapeBlue CloudStack Container Service Plugin
-Requires: cloudstack-management >= 4.5.0
+Requires:  cloudstack-management >= 4.5.0
 Group:     System Environment/Libraries
 %description ccs
 The CloudStack Container Service Plugin by ShapeBlue.

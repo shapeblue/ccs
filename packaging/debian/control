@@ -1,7 +1,7 @@
 Source: shapeblue-ccs
 Section: libs
 Priority: extra
-Maintainer: Shape Blue Ltd <CCS-help@shapeblue.com>
+Maintainer: ShapeBlue Ltd <CCS-help@shapeblue.com>
 Build-Depends: debhelper (>= 7), openjdk-7-jdk | openjdk-8-jdk, maven3 | maven (>= 3)
 Standards-Version: 3.8.1
 Homepage: http://packages.shapeblue.com/
