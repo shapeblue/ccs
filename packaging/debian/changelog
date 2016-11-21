@@ -1,6 +1,6 @@
-shapeblue-ccs (1.0.0) unstable; urgency=low
+shapeblue-ccs (1.0.1) unstable; urgency=low
 
-  * CloudStack Container Service Plugin Release version 1.0.0
+  * CloudStack Container Service Plugin Release version 1.0.1
 
- -- Shape Blue Ltd <CCS-help@shapeblue.com>  Mon, 11 Jul 2016 15:15:00 +0530
+ -- Shape Blue Ltd <CCS-help@shapeblue.com>  Mon, 21 Nov 2016 19:15:00 +0530
 
