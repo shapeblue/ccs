@@ -57,6 +57,7 @@ import com.cloud.network.rules.FirewallRuleVO;
 import com.cloud.network.rules.PortForwardingRuleVO;
 import com.cloud.network.rules.RulesService;
 import com.cloud.network.rules.dao.PortForwardingRulesDao;
+import org.apache.cloudstack.network.tls.CertService;
 import com.cloud.offering.NetworkOffering;
 import com.cloud.offering.ServiceOffering;
 import com.cloud.offerings.NetworkOfferingVO;
@@ -128,15 +129,15 @@ import org.apache.log4j.Logger;
 import org.bouncycastle.asn1.ASN1Encodable;
 import org.bouncycastle.asn1.DERSequence;
 import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
 import org.bouncycastle.asn1.x509.X509Extensions;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.openssl.PEMReader;
-import org.bouncycastle.openssl.PEMWriter;
 import org.bouncycastle.util.io.pem.PemObject;
+import org.bouncycastle.util.io.pem.PemReader;
+import org.bouncycastle.util.io.pem.PemWriter;
 import org.bouncycastle.x509.X509V1CertificateGenerator;
 import org.bouncycastle.x509.X509V3CertificateGenerator;
 import org.bouncycastle.x509.extension.AuthorityKeyIdentifierStructure;
-import org.bouncycastle.x509.extension.SubjectKeyIdentifierStructure;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.FlywayException;
 import org.joda.time.DateTime;
@@ -271,6 +272,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     protected ClusterDao _clusterDao;
     @Inject
     FirewallRulesDao _firewallDao;
+    @Inject
+    protected CertService certService;
 
     @Override
     public ContainerCluster findById(final Long id) {
@@ -999,10 +1002,10 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
             return new DeployDestination(_dcDao.findById(dcId), null, null, null);
         }
-        s_logger.warn(String.format("Cannot find enough capacity for container_cluster(requested cpu=%1$s memory=%2$s)",
-                cpu_requested*clusterSize, ram_requested*clusterSize));
-        throw new InsufficientServerCapacityException(String.format("Cannot find enough capacity for container_cluster(requested cpu=%1$s memory=%2$s)",
-                cpu_requested*clusterSize, ram_requested*clusterSize), DataCenter.class, dcId);
+        String msg = String.format("Cannot find enough capacity for container_cluster(requested cpu=%1$s memory=%2$s)",
+                cpu_requested*clusterSize, ram_requested*clusterSize);
+        s_logger.warn(msg);
+        throw new InsufficientServerCapacityException(msg, DataCenter.class, dcId);
     }
 
     public DeployDestination plan(final long containerClusterId, final long dcId) throws InsufficientServerCapacityException {
@@ -1162,8 +1165,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 }
 
                 try {
-                    _userVmService.destroyVm(vmID);
-                    _userVmService.expungeVm(vmID);
+                    _userVmService.destroyVm(vmID, true);
                     _containerClusterVmMapDao.expunge(clusterVM.getId());
                     if (s_logger.isDebugEnabled()) {
                         s_logger.debug("Destroyed VM: " + userVM.getInstanceName() + " as part of cluster: " + cluster.getName() + " destroy.");
@@ -1776,7 +1778,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 List<ContainerClusterVO> stoppedContainerClusters = _containerClusterDao.findContainerClustersInState(ContainerCluster.State.Stopped);
                 for (ContainerCluster containerCluster : stoppedContainerClusters ) {
                     if (s_logger.isDebugEnabled()) {
-                        s_logger.debug("Running container cluster state scanner on container cluster name:" + containerCluster.getName());
+                        s_logger.debug("Running container cluster state scanner on container cluster name:" + containerCluster.getName()+ " for state " + ContainerCluster.State.Stopped);
                     }
                     try {
                         if (!isClusterInDesiredState(containerCluster, VirtualMachine.State.Stopped)) {
@@ -1791,7 +1793,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 List<ContainerClusterVO> alertContainerClusters = _containerClusterDao.findContainerClustersInState(ContainerCluster.State.Alert);
                 for (ContainerCluster containerCluster : alertContainerClusters ) {
                     if (s_logger.isDebugEnabled()) {
-                        s_logger.debug("Running container cluster state scanner on container cluster name:" + containerCluster.getName());
+                        s_logger.debug("Running container cluster state scanner on container cluster name:" + containerCluster.getName() + " for state " + ContainerCluster.State.Alert);
                     }
                     try {
                         if (isClusterInDesiredState(containerCluster, VirtualMachine.State.Running)) {
@@ -1926,7 +1928,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         certGen.addExtension(X509Extensions.AuthorityKeyIdentifier, false,
                 new AuthorityKeyIdentifierStructure(rootCACert));
         certGen.addExtension(X509Extensions.SubjectKeyIdentifier, false,
-                new SubjectKeyIdentifierStructure(keyPair.getPublic()));
+                new SubjectKeyIdentifier(keyPair.getPublic().getEncoded()));
 
         if (isMasterNode) {
             final List<ASN1Encodable> subjectAlternativeNames = new ArrayList<ASN1Encodable>();
@@ -1966,20 +1968,26 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     }
 
     public X509Certificate pemToX509Cert(final String pem) throws IOException {
-        final PEMReader pr = new PEMReader(new StringReader(pem));
-        return (X509Certificate) pr.readObject();
+        return (X509Certificate) certService.parseCertificate(pem);
     }
 
-    public String x509CertificateToPem(final X509Certificate cert) throws IOException {
-        final StringWriter sw = new StringWriter();
-        try (final PEMWriter pw = new PEMWriter(sw)) {
-            pw.writeObject(cert);
+    /**
+     * @deprecated this should move to {@link CertService}
+     */
+    @Deprecated
+    public String x509CertificateToPem(final X509Certificate cert) throws IOException, CertificateEncodingException {
+
+        // TODO convert cert to PemObject
+        try (final StringWriter sw = new StringWriter();
+                final PemWriter pw = new PemWriter(sw)) {
+            final PemObject pemObject = new PemObject(cert.getType(), cert.getEncoded());
+            pw.writeObject(pemObject);
+            return sw.toString();
         }
-        return sw.toString();
     }
 
     public PrivateKey pemToRSAPrivateKey(final String pem) throws InvalidKeySpecException, IOException {
-        final PEMReader pr = new PEMReader(new StringReader(pem));
+        final PemReader pr = new PemReader(new StringReader(pem));
         final PemObject pemObject = pr.readPemObject();
         final KeyFactory keyFactory = getKeyFactory();
         return keyFactory.generatePrivate(new PKCS8EncodedKeySpec(pemObject.getContent()));
@@ -1988,7 +1996,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     public String rsaPrivateKeyToPem(final PrivateKey key) throws IOException {
         final PemObject pemObject = new PemObject(CCS_RSA_PRIVATE_KEY, key.getEncoded());
         final StringWriter sw = new StringWriter();
-        try (final PEMWriter pw = new PEMWriter(sw)) {
+        try (final PemWriter pw = new PemWriter(sw)) {
             pw.writeObject(pemObject);
         }
         return sw.toString();
