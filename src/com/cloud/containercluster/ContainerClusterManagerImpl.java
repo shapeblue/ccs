@@ -39,6 +39,7 @@ import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.host.Host.Type;
 import com.cloud.host.HostVO;
+import com.cloud.network.IpAddress;
 import com.cloud.network.Network;
 import com.cloud.network.Network.Service;
 import com.cloud.network.NetworkModel;
@@ -51,13 +52,11 @@ import com.cloud.network.dao.NetworkDao;
 import com.cloud.network.dao.NetworkVO;
 import com.cloud.network.dao.PhysicalNetworkDao;
 import com.cloud.network.firewall.FirewallService;
-import com.cloud.network.IpAddress;
 import com.cloud.network.rules.FirewallRule;
 import com.cloud.network.rules.FirewallRuleVO;
 import com.cloud.network.rules.PortForwardingRuleVO;
 import com.cloud.network.rules.RulesService;
 import com.cloud.network.rules.dao.PortForwardingRulesDao;
-import org.apache.cloudstack.network.tls.CertService;
 import com.cloud.offering.NetworkOffering;
 import com.cloud.offering.ServiceOffering;
 import com.cloud.offerings.NetworkOfferingVO;
@@ -124,6 +123,7 @@ import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
 import org.apache.cloudstack.framework.security.keystore.KeystoreDao;
 import org.apache.cloudstack.framework.security.keystore.KeystoreVO;
 import org.apache.cloudstack.managed.context.ManagedContextRunnable;
+import org.apache.cloudstack.network.tls.CertService;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.log4j.Logger;
 import org.bouncycastle.asn1.ASN1Encodable;
@@ -160,9 +160,9 @@ import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
-import java.net.UnknownHostException;
 import java.net.Socket;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -1976,14 +1976,13 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
      */
     @Deprecated
     public String x509CertificateToPem(final X509Certificate cert) throws IOException, CertificateEncodingException {
-
-        // TODO convert cert to PemObject
-        try (final StringWriter sw = new StringWriter();
-                final PemWriter pw = new PemWriter(sw)) {
-            final PemObject pemObject = new PemObject(cert.getType(), cert.getEncoded());
-            pw.writeObject(pemObject);
-            return sw.toString();
+        StringWriter sw = new StringWriter();
+        try (PemWriter pemWriter = new PemWriter(sw)) {
+            pemWriter.writeObject(new PemObject("CERTIFICATE", cert.getEncoded()));
+        } finally {
+            sw.close();
         }
+        return sw.toString();
     }
 
     public PrivateKey pemToRSAPrivateKey(final String pem) throws InvalidKeySpecException, IOException {
