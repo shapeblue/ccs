@@ -1976,13 +1976,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
      */
     @Deprecated
     public String x509CertificateToPem(final X509Certificate cert) throws IOException, CertificateEncodingException {
-        StringWriter sw = new StringWriter();
-        try (PemWriter pemWriter = new PemWriter(sw)) {
-            pemWriter.writeObject(new PemObject("CERTIFICATE", cert.getEncoded()));
-        } finally {
-            sw.close();
-        }
+        try (StringWriter sw = new StringWriter()) {
+            try (PemWriter pemWriter = new PemWriter(sw)) {
+                pemWriter.writeObject(new PemObject("CERTIFICATE", cert.getEncoded()));
+            }
         return sw.toString();
+        }
     }
 
     public PrivateKey pemToRSAPrivateKey(final String pem) throws InvalidKeySpecException, IOException {
