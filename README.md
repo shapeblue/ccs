@@ -24,7 +24,7 @@ The CloudStack Container Service (CCS) orchestrates provisioning of [Kubernetes]
 
 CCS is implemented as a CloudStack management server plugin. Therefore, a functioning CloudStack management server is prequisite for installation. CCS is distributed as DEB/RPM packages installed from public Yum/Apt repositories.  The packages include a script to download and install the default CoreOS template into each zone. Following installation of the default CoreOS template, CCS will be ready for use.
 
-For more detailed installation instructions and supported CloudStack releases and hypervisors, please see the [CCS Installation and Administation Guide](https://downloads.shapeblue.com/ccs/1.0/Installation_and_Administration_Guide.pdf)
+For more detailed installation instructions and supported CloudStack releases and hypervisors, please see the [CCS Installation and Administation Guide](http://downloads.shapeblue.com/ccs/1.0/Installation_and_Administration_Guide.pdf)
 
 ## Development
 
