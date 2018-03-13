@@ -372,7 +372,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
             try {
                 network = _networkMgr.createGuestNetwork(networkOffering.getId(), name + "-network", owner.getAccountName() + "-network",
-                        null, null, null, false,null, owner, null, physicalNetwork, zone.getId(), ControlledEntity.ACLType.Account, null, null, null, null, true, null, null);
+                        null, null, null, null, owner, null, physicalNetwork, zone.getId(), ControlledEntity.ACLType.Account, null, null, null, null, true, null);
             } catch(Exception e) {
                 s_logger.warn("Unable to create a network for the container cluster due to " + e);
                 throw new ManagementServerException("Unable to create a network for the container cluster.");
@@ -1301,7 +1301,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         masterVm = _userVmService.createAdvancedVirtualMachine(zone, serviceOffering, template, networkIds, owner,
                 hostName, containerCluster.getDescription(), null, null, null,
                 null, BaseCmd.HTTPMethod.POST, base64UserData, containerCluster.getKeyPair(),
-                null, addrs, null, null, null, customparameterMap, null, null, null);
+                null, addrs, null, null, null, customparameterMap, null);
 
         if (s_logger.isDebugEnabled()) {
             s_logger.debug("Created master VM: " + hostName + " in the container cluster: " + containerCluster.getName());
@@ -1397,7 +1397,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         nodeVm = _userVmService.createAdvancedVirtualMachine(zone, serviceOffering, template, networkIds, owner,
                 hostName, containerCluster.getDescription(), null, null, null,
                 null, BaseCmd.HTTPMethod.POST, base64UserData, containerCluster.getKeyPair(),
-                null, addrs, null, null, null, customparameterMap, null, null, null);
+                null, addrs, null, null, null, customparameterMap, null);
 
         if (s_logger.isDebugEnabled()) {
             s_logger.debug("Created cluster node VM: " + hostName + " in the container cluster: " + containerCluster.getName());

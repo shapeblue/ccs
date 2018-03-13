@@ -54,7 +54,7 @@
 
   <properties>
     <jdk.version>1.8</jdk.version>
-    <acs.version>4.11.0.0</acs.version>
+    <acs.version>4.10.0.0</acs.version>
     <cs.jpa.version>2.1.1</cs.jpa.version>
     <cs.ejb.version>3.0</cs.ejb.version>
     <cs.gson.version>1.7.2</cs.gson.version>
