@@ -56,10 +56,10 @@ install:
 	# shapeblue-ccs
 	mkdir $(DESTDIR)/$(SYSCONFDIR)/$(CLOUDSTACK)/management
 	mkdir -p $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapps/client/WEB-INF/lib
-	mkdir -p $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapps/client/plugins
+	mkdir -p $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapp/plugins
 	mkdir -p $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/setup
 	cp ../target/cloud-plugin-shapeblue-ccs-$(VERSION)$(MVNADD).jar $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapps/client/WEB-INF/lib/
-	cp -r ../ui/plugins/ccs $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapps/client/plugins/
+	cp -r ../ui/plugins/ccs $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapp/plugins/
 	cp -r ../schema/delete-schema-ccs.sql $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/setup/
 	cp -r ../conf/* $(DESTDIR)/$(SYSCONFDIR)/$(CLOUDSTACK)/management/
 	cp -r ../scripts/setup/* $(DESTDIR)/$(USRBINDIR)/
