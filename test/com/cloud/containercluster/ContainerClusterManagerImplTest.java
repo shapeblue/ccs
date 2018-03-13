@@ -64,7 +64,6 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.Spy;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
-import org.springframework.test.context.support.AnnotationConfigContextLoader;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -77,7 +76,7 @@ import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.when;
 
 @RunWith(SpringJUnit4ClassRunner.class)
-@ContextConfiguration(loader = AnnotationConfigContextLoader.class)
+@ContextConfiguration(locations = {"classpath*:**/containerClusterContext.xml"})
 public class ContainerClusterManagerImplTest {
     public static final Logger s_logger = Logger.getLogger(ContainerClusterManagerImplTest.class);
 
