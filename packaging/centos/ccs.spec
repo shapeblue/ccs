@@ -48,19 +48,19 @@ mvn clean package
 %install
 echo "Installing ShapeBlue Cloudstack Container Service Plugin"
 [ ${RPM_BUILD_ROOT} != "/" ] && rm -rf ${RPM_BUILD_ROOT}
-mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapps/client/WEB-INF/lib
+mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapp/WEBB-INF/lib
 mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapp/plugins
 mkdir -p ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/setup
 mkdir -p ${RPM_BUILD_ROOT}%{_sysconfdir}/cloudstack/management
 mkdir -p ${RPM_BUILD_ROOT}%{_bindir}/
 
-cp -r target/cloud-plugin-shapeblue-ccs-%{_maventag}.jar ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapps/client/WEB-INF/lib/
+cp -r target/cloud-plugin-shapeblue-ccs-%{_maventag}.jar ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapp/WEBB-INF/lib/
 cp -r ../../../../ui/plugins/ccs ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapp/plugins/
 cp -r ../../../../schema/delete-schema-ccs.sql ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/setup/delete-schema-ccs.sql
 cp -r ../../../../conf/* ${RPM_BUILD_ROOT}%{_sysconfdir}/cloudstack/management
 cp -r ../../../../scripts/setup/* ${RPM_BUILD_ROOT}%{_bindir}/
 cp ../../../../deps/kubectl ${RPM_BUILD_ROOT}%{_bindir}/
-cp target/dependency/flyway-core-*.jar ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapps/client/WEB-INF/lib/
+cp target/dependency/flyway-core-*.jar ${RPM_BUILD_ROOT}%{_datadir}/cloudstack-management/webapp/WEBB-INF/lib/
 
 %clean
 [ ${RPM_BUILD_ROOT} != "/" ] && rm -rf ${RPM_BUILD_ROOT}
