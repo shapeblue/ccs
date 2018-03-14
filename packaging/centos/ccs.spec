@@ -102,7 +102,7 @@ fi
 
 %files ccs
 %defattr(-,root,root,-)
-%{_datadir}/cloudstack-management/webapps
+%{_datadir}/cloudstack-management/webapp
 %{_datadir}/cloudstack-management/setup/delete-schema-ccs.sql
 %{_sysconfdir}/cloudstack/management/*.yml
 %{_bindir}/ccs-cleanup-database
