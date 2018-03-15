@@ -55,16 +55,16 @@ install:
 
 	# shapeblue-ccs
 	mkdir $(DESTDIR)/$(SYSCONFDIR)/$(CLOUDSTACK)/management
-	mkdir -p $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapp/WEB-INF/lib
+	mkdir -p $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/lib
 	mkdir -p $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapp/plugins
 	mkdir -p $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/setup
-	cp ../target/cloud-plugin-shapeblue-ccs-$(VERSION)$(MVNADD).jar $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapp/WEB-INF/lib/
+	cp ../target/cloud-plugin-shapeblue-ccs-$(VERSION)$(MVNADD).jar $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/lib/
 	cp -r ../ui/plugins/ccs $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapp/plugins/
 	cp -r ../schema/delete-schema-ccs.sql $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/setup/
 	cp -r ../conf/* $(DESTDIR)/$(SYSCONFDIR)/$(CLOUDSTACK)/management/
 	cp -r ../scripts/setup/* $(DESTDIR)/$(USRBINDIR)/
 	cp ../deps/kubectl $(DESTDIR)/$(USRBINDIR)/
-	cp ../target/dependency/flyway-core-*.jar $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/webapp/WEB-INF/lib/
+	cp ../target/dependency/flyway-core-*.jar $(DESTDIR)/usr/share/$(CLOUDSTACK)-management/lib/
 
 	dh_installdirs
 	dh_install
