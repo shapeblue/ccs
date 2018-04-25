@@ -667,6 +667,14 @@
                                                     'class': 'ok',
                                                     'style': 'height: 40px',
                                                     click: function() {
+                                                        $.ajax({
+                                                            url: createURL("listContainerClusterCACert"),
+                                                            dataType: "json",
+                                                            async: false,
+                                                            success: function(json) {
+                                                                rootCaCert = json.listcontainerclustercacertresponse.rootcacert.certificate;
+                                                            }
+                                                        });
                                                         downloadCaCert();
                                                     }
                                                 }]
