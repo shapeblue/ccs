@@ -113,7 +113,7 @@ parser.add_argument("-s", "--secretfile", help="A readable text file containing 
 
 args = parser.parse_args()
 
-package_url='http://downloads.shapeblue.com/ccs/1.0/templates/'
+package_url='http://downloads.shapeblue.com/ccs/1.0.3/templates/'
 hypervisors = ['XenServer', 'KVM', 'VMware', 'HyperV', 'OVM']
 image_formats = { 'XenServer': 'VHD', 'KVM' : 'QCOW2', 'HyperV' : 'VMDK',  'OVM' : 'RAW', 'VMware' : 'OVA' }
 url_name = {\
