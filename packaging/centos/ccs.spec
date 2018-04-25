@@ -30,7 +30,7 @@ CloudStack Container Service plugin by ShapeBlue.
 
 %package ccs
 Summary:   ShapeBlue CloudStack Container Service Plugin
-Requires:  cloudstack-management >= 4.5.0
+Requires:  cloudstack-management >= 4.11.0
 Group:     System Environment/Libraries
 %description ccs
 The CloudStack Container Service Plugin by ShapeBlue.
@@ -110,5 +110,7 @@ fi
 %{_bindir}/ccs-template-install
 %{_bindir}/kubectl
 %changelog
+* Mon Apr 25 2018 Shape Blue Ltd <CCS-help@shapeblue.com> 1.0.3
+- CloudStack Container Service Plugin for ACS 4.11
 * Mon Jul 11 2016 Shape Blue Ltd <CCS-help@shapeblue.com> 1.0.0
 - CloudStack Container Service Plugin
