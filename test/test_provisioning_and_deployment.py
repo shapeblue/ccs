@@ -131,18 +131,18 @@ class TestProvisioningAndDeployment(cloudstackTestCase):
         sshClient = SshClient(host=self.mgtSvrDetails["mgtSvrIp"], port=22, user=self.mgtSvrDetails["user"], passwd=self.mgtSvrDetails["passwd"]) 
         
         sshClient.execute("mkdir redis-example ")
-        sshClient.execute("wget https://raw.githubusercontent.com/kubernetes/kubernetes/master/examples/redis/redis-controller.yaml " +
-                                                                "https://raw.githubusercontent.com/kubernetes/kubernetes/master/examples/redis/redis-master.yaml " +
-                                                                "https://raw.githubusercontent.com/kubernetes/kubernetes/master/examples/redis/redis-proxy.yaml " +
-                                                                "https://raw.githubusercontent.com/kubernetes/kubernetes/master/examples/redis/redis-sentinel-controller.yaml " +
-                                                                "https://raw.githubusercontent.com/kubernetes/kubernetes/master/examples/redis/redis-sentinel-service.yaml " +
+        sshClient.execute("wget https://github.com/fabric8io/kansible/tree/master/vendor/k8s.io/kubernetes/examples/redis/redis-controller.yaml " +
+                                                                "https://github.com/fabric8io/kansible/tree/master/vendor/k8s.io/kubernetes/examples/redis/redis-master.yaml " +
+                                                                "https://github.com/fabric8io/kansible/tree/master/vendor/k8s.io/kubernetes/examples/redis/redis-proxy.yaml " +
+                                                                "https://github.com/fabric8io/kansible/tree/master/vendor/k8s.io/kubernetes/examples/redis/redis-sentinel-controller.yaml " +
+                                                                "https://github.com/fabric8io/kansible/tree/master/vendor/k8s.io/kubernetes/examples/redis/redis-sentinel-service.yaml " +
                                                                 "-P /root/redis-example/")
         sshClient.execute("sed -i -e 's/redis:v2/redis:v1/g' /root/redis-example/*.yaml")
         sshClient.execute("mkdir redis-example/image")
-        sshClient.execute("wget https://raw.githubusercontent.com/kubernetes/kubernetes/master/examples/redis/image/Dockerfile " +
-                                                        "https://raw.githubusercontent.com/kubernetes/kubernetes/master/examples/redis/image/redis-master.conf " +
-                                                        "https://raw.githubusercontent.com/kubernetes/kubernetes/master/examples/redis/image/redis-slave.conf " + 
-                                                        "https://raw.githubusercontent.com/kubernetes/kubernetes/master/examples/redis/image/run.sh -P /root/redis-example/image/")
+        sshClient.execute("wget https://github.com/fabric8io/kansible/tree/master/vendor/k8s.io/kubernetes/examples/redis/image/Dockerfile " +
+                                                        "https://github.com/fabric8io/kansible/tree/master/vendor/k8s.io/kubernetes/examples/redis/image/redis-master.conf " +
+                                                        "https://github.com/fabric8io/kansible/tree/master/vendor/k8s.io/kubernetes/examples/redis/image/redis-slave.conf " +
+                                                        "https://github.com/fabric8io/kansible/tree/master/vendor/k8s.io/kubernetes/examples/redis/image/run.sh -P /root/redis-example/image/")
         
         sshClient.execute("kubectl create -f /root/redis-example/redis-master.yaml -s " + self.cluster_endpoint + " --insecure-skip-tls-verify=true --username=admin --password=" + self.cluster_password)
         sshClient.execute("kubectl create -f /root/redis-example/redis-sentinel-service.yaml -s " + self.cluster_endpoint + " --insecure-skip-tls-verify=true --username=admin --password=" + self.cluster_password)
