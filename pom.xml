@@ -22,7 +22,7 @@
 
   <groupId>org.apache.cloudstack</groupId>
   <artifactId>cloud-plugin-shapeblue-ccs</artifactId>
-  <version>1.0.3-SNAPSHOT</version>
+  <version>1.0.3</version>
   <name>Apache CloudStack Plugin - Container Cluster Service</name>
   <description>Manages Kubernetes containers clusters using the CloudStack control plane</description>
   <url>http://www.shapeblue.com/cloudstack-container-service/</url>
