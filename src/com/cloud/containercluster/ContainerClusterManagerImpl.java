@@ -1165,7 +1165,19 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 }
 
                 try {
-                    _userVmService.destroyVm(vmID, true);
+                    UserVm vm = _userVmService.destroyVm(vmID, true);
+                    if(! VirtualMachine.State.Expunging.equals(vm.getState())) {
+                        s_logger.warn(String.format("VM '%s' with uuid '%s' should have been expunging by now but is '%s'... retrying..."
+                                , vm.getInstanceName()
+                                , vm.getUuid()
+                                , vm.getState().toString() ));
+                        vm = _userVmService.expungeVm(vmID);
+                        if(! VirtualMachine.State.Expunging.equals(vm.getState())) {
+                            s_logger.error(String.format("VM '%s' is now in state '%s'. I will probably fail at deleting it's cluster."
+                                    , vm.getInstanceName()
+                                    , vm.getState().toString()));
+                        }
+                    }
                     _containerClusterVmMapDao.expunge(clusterVM.getId());
                     if (s_logger.isDebugEnabled()) {
                         s_logger.debug("Destroyed VM: " + userVM.getInstanceName() + " as part of cluster: " + cluster.getName() + " destroy.");
