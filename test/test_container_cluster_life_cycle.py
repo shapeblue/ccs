@@ -15,6 +15,7 @@
 import marvin
 from marvin.cloudstackTestCase import *
 from marvin.cloudstackAPI import *
+from marvin.ccsAPI import *
 from marvin.lib.utils import *
 from marvin.lib.base import *
 from marvin.lib.common import *
