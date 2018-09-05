@@ -143,7 +143,6 @@ import org.flywaydb.core.api.FlywayException;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 
-import javax.ejb.Local;
 import javax.inject.Inject;
 import javax.naming.ConfigurationException;
 import javax.security.auth.x500.X500Principal;
@@ -194,7 +193,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-@Local(value = {ContainerClusterManager.class})
 public class ContainerClusterManagerImpl extends ManagerBase implements ContainerClusterManager, ContainerClusterService {
 
     private static final Logger s_logger = Logger.getLogger(ContainerClusterManagerImpl.class);
