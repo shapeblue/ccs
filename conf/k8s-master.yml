@@ -7,7 +7,7 @@ write-files:
     content: |
       OPTS_RPC_MOUNTD=""
 
-  - path: /srv/kubernetes/basicauth.csv
+  - path: /etc/kubernetes/pki/auth.csv
     permissions: '0644'
     content: |
       {{ k8s_master.password }},{{ k8s_master.user }},1
@@ -27,199 +27,89 @@ write-files:
     content: |
       {{ k8s_master.apiserver.key }}
 
-  - path: /opt/bin/wupiao
-    permissions: '0755'
-    content: |
-      #!/bin/bash
-      # [w]ait [u]ntil [p]ort [i]s [a]ctually [o]pen
-      [ -n "$1" ] && \
-        until curl -o /dev/null -sIf http://${1}; do \
-          sleep 1 && echo .;
-        done;
-      exit $?
-
-  - path: /srv/kubernetes/manifests/kube-system.json
-    content: |
-        {
-          "apiVersion": "v1",
-          "kind": "Namespace",
-          "metadata": {
-            "name": "kube-system"
-          }
-        }
-
-  - path: /opt/bin/install-kube-system
+  - path: /opt/bin/setup-kube-system
     permissions: 0700
     owner: root:root
     content: |
       #!/bin/bash -e
-      /usr/bin/curl -L -o /srv/kubernetes/manifests/dashboard-controller.json https://raw.githubusercontent.com/skippbox/configk8s/master/json/dashboard-controller.json
+      export PATH=$PATH:/opt/bin
 
-      /usr/bin/curl -L -o /srv/kubernetes/manifests/dashboard-service.json https://raw.githubusercontent.com/skippbox/configk8s/master/json/dashboard-service.json
+      CNI_VERSION="v0.7.1"
+      mkdir -p /opt/cni/bin
+      curl -L "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-amd64-${CNI_VERSION}.tgz" | tar -C /opt/cni/bin -xz
 
-      /usr/bin/curl -L -o /srv/kubernetes/manifests/skydns-svc.json https://raw.githubusercontent.com/skippbox/configk8s/master/json/skydns-svc.json
+      CRICTL_VERSION="v1.11.1"
+      mkdir -p /opt/bin
+      curl -L "https://github.com/kubernetes-incubator/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-amd64.tar.gz" | tar -C /opt/bin -xz
 
-      /usr/bin/curl -L -o /srv/kubernetes/manifests/skydns-rc.json https://raw.githubusercontent.com/skippbox/configk8s/master/json/skydns-rc.json
+      RELEASE="$(curl -sSL https://dl.k8s.io/release/stable.txt)"
+      mkdir -p /opt/bin
+      cd /opt/bin
+      curl -L --remote-name-all https://storage.googleapis.com/kubernetes-release/release/${RELEASE}/bin/linux/amd64/{kubeadm,kubelet,kubectl}
+      chmod +x {kubeadm,kubelet,kubectl}
 
-      /usr/bin/curl -H "Content-Type: application/json" -XPOST -d @"/srv/kubernetes/manifests/kube-system.json" "http://127.0.0.1:8080/api/v1/namespaces"
+      curl -sSL "https://raw.githubusercontent.com/kubernetes/kubernetes/${RELEASE}/build/debs/kubelet.service" | sed "s:/usr/bin:/opt/bin:g" > /etc/systemd/system/kubelet.service
+      mkdir -p /etc/systemd/system/kubelet.service.d
+      curl -sSL "https://raw.githubusercontent.com/kubernetes/kubernetes/${RELEASE}/build/debs/10-kubeadm.conf" | sed "s:/usr/bin:/opt/bin:g" > /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+      systemctl enable kubelet && systemctl start kubelet
+      sysctl net.bridge.bridge-nf-call-iptables=1
 
-      /usr/bin/curl -H "Content-Type: application/json" -XPOST -d @"/srv/kubernetes/manifests/dashboard-service.json" "http://127.0.0.1:8080/api/v1/namespaces/kube-system/services"
+      kubeadm config images pull
+      kubeadm init --pod-network-cidr=10.244.0.0/16 --token a4qgg6.84hjisyqzvth7yp6
+      sed -i '/allow-privileged=true/a \ \ \ \ - --basic-auth-file=/etc/kubernetes/pki/auth.csv' /etc/kubernetes/manifests/kube-apiserver.yaml
 
-      /usr/bin/curl -H "Content-Type: application/json" -XPOST -d @"/srv/kubernetes/manifests/dashboard-controller.json" "http://127.0.0.1:8080/api/v1/namespaces/kube-system/replicationcontrollers"
+  - path: /opt/bin/deploy-kube-system
+    permissions: 0700
+    owner: root:root
+    content: |
+      #!/bin/bash -e
+      export PATH=$PATH:/opt/bin
+      export KUBECONFIG=/etc/kubernetes/admin.conf
 
-      /usr/bin/curl -H "Content-Type: application/json" -XPOST -d @"/srv/kubernetes/manifests/skydns-svc.json" "http://127.0.0.1:8080/api/v1/namespaces/kube-system/services"
+      mkdir -p /root/.kube
+      cp -i /etc/kubernetes/admin.conf /root/.kube/config
+      chown $(id -u):$(id -g) /root/.kube/config
+      echo export PATH=\$PATH:/opt/bin >> /root/.bashrc
 
-      /usr/bin/curl -H "Content-Type: application/json" -XPOST -d @"/srv/kubernetes/manifests/skydns-rc.json" "http://127.0.0.1:8080/api/v1/namespaces/kube-system/replicationcontrollers"
+      kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.10.0/Documentation/kube-flannel.yml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v1.10.0/src/deploy/recommended/kubernetes-dashboard.yaml
 
-hostname: master
+      kubectl create rolebinding admin-binding --role=admin --user=admin
+      kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=admin
+      kubectl create clusterrolebinding kubernetes-dashboard --clusterrole=cluster-admin --serviceaccount=kube-system:kubernetes-dashboard
 
 coreos:
-
-  etcd2:
-    name: master
-    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
-    advertise-client-urls: http://$private_ipv4:2379,http://$private_ipv4:4001
-    initial-cluster-token: k8s_etcd
-    listen-peer-urls: http://$private_ipv4:2380,http://$private_ipv4:7001
-    initial-advertise-peer-urls: http://$private_ipv4:2380
-    initial-cluster: master=http://$private_ipv4:2380
-    initial-cluster-state: new
-
-  fleet:
-    metadata: "role=master"
-
   units:
-    - name: fleet.service
-      command: start
-
-    - name: flanneld.service
-      command: start
-      drop-ins:
-        - name: 50-network-config.conf
-          content: |
-            [Unit]
-            Requires=etcd2.service
-            [Service]
-            ExecStartPre=/usr/bin/etcdctl set /coreos.com/network/config '{"Network":"10.244.0.0/16", "Backend": {"Type": "vxlan"}}'
-
     - name: docker.service
       command: start
-      drop-ins:
-        - name: 40-flannel.conf
-          content: |
-            [Unit]
-            Requires=flanneld.service
-            After=flanneld.service
+      enable: true
 
-    - name: generate-serviceaccount-key.service
+    - name: setup-kube-system.service
       command: start
       content: |
         [Unit]
-        Description=Generate service-account key file
+        Requires=docker.service
+        After=docker.service
+
         [Service]
-        ExecStartPre=-/usr/bin/mkdir -p /opt/bin
-        ExecStart=/bin/openssl genrsa -out /opt/bin/kube-serviceaccount.key 2048 2>/dev/null
-        RemainAfterExit=yes
-        Type=oneshot
+        Type=simple
+        StartLimitInterval=0
+        ExecStart=/opt/bin/setup-kube-system
 
-    - name: setup-network-environment.service
+    - name: deploy-kube-system.service
       command: start
       content: |
         [Unit]
-        Description=Setup Network Environment
-        Documentation=https://github.com/kelseyhightower/setup-network-environment
-        Requires=network-online.target
-        After=network-online.target
-        [Service]
-        ExecStartPre=-/usr/bin/mkdir -p /opt/bin
-        ExecStartPre=/usr/bin/curl -L -o /opt/bin/setup-network-environment -z /opt/bin/setup-network-environment https://github.com/kelseyhightower/setup-network-environment/releases/download/v1.0.0/setup-network-environment
-        ExecStartPre=/usr/bin/chmod +x /opt/bin/setup-network-environment
-        ExecStart=/opt/bin/setup-network-environment
-        RemainAfterExit=yes
-        Type=oneshot
-
-    - name: install-kube-system.service
-      command: start
-      content: |
-        [Unit]
-        Requires=kube-apiserver.service
-        After=kube-apiserver.service
+        Requires=setup-kube-system.service
+        After=setup-kube-system.service
 
         [Service]
         Type=simple
         StartLimitInterval=0
         Restart=on-failure
-        ExecStartPre=/usr/bin/curl http://127.0.0.1:8080/version
-        ExecStart=/opt/bin/install-kube-system
-
-    - name: kube-apiserver.service
-      command: start
-      content: |
-        [Unit]
-        Description=Kubernetes API Server
-        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
-        Requires=setup-network-environment.service etcd2.service generate-serviceaccount-key.service
-        After=setup-network-environment.service etcd2.service generate-serviceaccount-key.service
-        [Service]
-        EnvironmentFile=/etc/network-environment
-        ExecStartPre=-/usr/bin/mkdir -p /opt/bin
-        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-apiserver -z /opt/bin/kube-apiserver https://storage.googleapis.com/kubernetes-release/release/v1.2.4/bin/linux/amd64/kube-apiserver
-        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-apiserver
-        ExecStartPre=/opt/bin/wupiao 127.0.0.1:2379/v2/machines
-        ExecStart=/opt/bin/kube-apiserver \
-        --service-account-key-file=/opt/bin/kube-apiserver.key \
-        --service-account-lookup=false \
-        --basic-auth-file=/srv/kubernetes/basicauth.csv \
-        --admission-control=NamespaceLifecycle,NamespaceAutoProvision,LimitRanger,SecurityContextDeny,ServiceAccount,ResourceQuota \
-        --runtime-config=api/v1 \
-        --allow-privileged=true \
-        --insecure-port=8080 \
-        --secure-port=443 \
-        --client-ca-file=/opt/bin/ca.crt \
-        --tls-cert-file=/opt/bin/kube-apiserver.crt \
-        --tls-private-key-file=/opt/bin/kube-apiserver.key \
-        --service-cluster-ip-range=10.0.0.0/16 \
-        --etcd-servers=http://127.0.0.1:2379 \
-        --bind-address=0.0.0.0 \
-        --insecure-bind-address=0.0.0.0 \
-        --logtostderr=true
-        Restart=always
-        RestartSec=10
-
-    - name: kube-controller-manager.service
-      command: start
-      content: |
-        [Unit]
-        Description=Kubernetes Controller Manager
-        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
-        Requires=kube-apiserver.service
-        After=kube-apiserver.service
-        [Service]
-        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-controller-manager -z /opt/bin/kube-controller-manager https://storage.googleapis.com/kubernetes-release/release/v1.2.4/bin/linux/amd64/kube-controller-manager
-        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-controller-manager
-        ExecStart=/opt/bin/kube-controller-manager \
-        --service-account-private-key-file=/opt/bin/kube-apiserver.key \
-        --root-ca-file=/opt/bin/ca.crt \
-        --master=127.0.0.1:8080 \
-        --logtostderr=true
-        Restart=always
-        RestartSec=10
-
-    - name: kube-scheduler.service
-      command: start
-      content: |
-        [Unit]
-        Description=Kubernetes Scheduler
-        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
-        Requires=kube-apiserver.service
-        After=kube-apiserver.service
-        [Service]
-        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-scheduler -z /opt/bin/kube-scheduler https://storage.googleapis.com/kubernetes-release/release/v1.2.4/bin/linux/amd64/kube-scheduler
-        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-scheduler
-        ExecStart=/opt/bin/kube-scheduler --master=127.0.0.1:8080
-        Restart=always
-        RestartSec=10
+        ExecStartPre=/usr/bin/curl -k https://127.0.0.1:6443/version
+        ExecStart=/opt/bin/deploy-kube-system
 
   update:
-    group: alpha
+    group: stable
     reboot-strategy: off

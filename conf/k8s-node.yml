@@ -1,15 +1,7 @@
 #cloud-config
-write-files:
-  - path: /opt/bin/wupiao
-    permissions: '0755'
-    content: |
-      #!/bin/bash
-      # [w]ait [u]ntil [p]ort [i]s [a]ctually [o]pen
-      [ -n "$1" ] && [ -n "$2" ] && while ! curl --output /dev/null \
-        --silent --head --fail \
-        http://${1}:${2}; do sleep 1 && echo -n .; done;
-      exit $?
 
+---
+write-files:
   - path: /opt/bin/ca.crt
     permissions: '0644'
     content: |
@@ -25,92 +17,74 @@ write-files:
     content: |
       {{ k8s_node.client.key }}
 
+  - path: /opt/bin/setup-kube-system
+    permissions: 0700
+    owner: root:root
+    content: |
+      #!/bin/bash -e
+      CNI_VERSION="v0.7.1"
+      mkdir -p /opt/cni/bin
+      curl -L "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-amd64-${CNI_VERSION}.tgz" | tar -C /opt/cni/bin -xz
+
+      CRICTL_VERSION="v1.11.1"
+      mkdir -p /opt/bin
+      curl -L "https://github.com/kubernetes-incubator/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-amd64.tar.gz" | tar -C /opt/bin -xz
+
+      RELEASE="$(curl -sSL https://dl.k8s.io/release/stable.txt)"
+      mkdir -p /opt/bin
+      cd /opt/bin
+      curl -L --remote-name-all https://storage.googleapis.com/kubernetes-release/release/${RELEASE}/bin/linux/amd64/{kubeadm,kubelet,kubectl}
+      chmod +x {kubeadm,kubelet,kubectl}
+
+      curl -sSL "https://raw.githubusercontent.com/kubernetes/kubernetes/${RELEASE}/build/debs/kubelet.service" | sed "s:/usr/bin:/opt/bin:g" > /etc/systemd/system/kubelet.service
+      mkdir -p /etc/systemd/system/kubelet.service.d
+      curl -sSL "https://raw.githubusercontent.com/kubernetes/kubernetes/${RELEASE}/build/debs/10-kubeadm.conf" | sed "s:/usr/bin:/opt/bin:g" > /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+      systemctl enable kubelet && systemctl start kubelet
+      sysctl net.bridge.bridge-nf-call-iptables=1
+
+      export PATH=$PATH:/opt/bin
+      /opt/bin/kubeadm config images pull
+
+  - path: /opt/bin/deploy-kube-system
+    permissions: 0700
+    owner: root:root
+    content: |
+      #!/bin/bash -e
+      export PATH=$PATH:/opt/bin
+      /opt/bin/kubeadm join {{ k8s_master.default_ip }}:6443 --token a4qgg6.84hjisyqzvth7yp6 --discovery-token-unsafe-skip-ca-verification
+
 coreos:
-  etcd2:
-    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
-    advertise-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
-    initial-cluster: master=http://{{ k8s_master.default_ip }}:2380
-    proxy: on
-  fleet:
-    metadata: "role=node"
   units:
-    - name: etcd2.service
-      command: start
-    - name: fleet.service
-      command: start
-    - name: flanneld.service
-      command: start
     - name: docker.service
-      drop-ins:
-        - name: 40-flannel.conf
-          content: |
-            [Unit]
-            Requires=flanneld.service
-            After=flanneld.service
       command: start
-    - name: setup-network-environment.service
+      enable: true
+
+    - name: setup-kube-system.service
       command: start
       content: |
         [Unit]
-        Description=Setup Network Environment
-        Documentation=https://github.com/kelseyhightower/setup-network-environment
-        Requires=network-online.target
-        After=network-online.target
+        Requires=docker.service
+        After=docker.service
+
         [Service]
-        ExecStartPre=-/usr/bin/mkdir -p /opt/bin
-        ExecStartPre=/usr/bin/curl -L -o /opt/bin/setup-network-environment -z /opt/bin/setup-network-environment https://github.com/kelseyhightower/setup-network-environment/releases/download/v1.0.0/setup-network-environment
-        ExecStartPre=/usr/bin/chmod +x /opt/bin/setup-network-environment
-        ExecStart=/opt/bin/setup-network-environment
-        RemainAfterExit=yes
-        Type=oneshot
-    - name: kube-proxy.service
+        Type=simple
+        StartLimitInterval=0
+        ExecStart=/opt/bin/setup-kube-system
+
+    - name: deploy-kube-system.service
       command: start
       content: |
         [Unit]
-        Description=Kubernetes Proxy
-        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
-        Requires=setup-network-environment.service
-        After=setup-network-environment.service
+        Requires=setup-kube-system.service
+        After=setup-kube-system.service
+
         [Service]
-        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kube-proxy -z /opt/bin/kube-proxy https://storage.googleapis.com/kubernetes-release/release/v1.2.4/bin/linux/amd64/kube-proxy
-        ExecStartPre=/usr/bin/chmod +x /opt/bin/kube-proxy
-        # wait for kubernetes master to be up and ready
-        ExecStartPre=/opt/bin/wupiao {{ k8s_master.default_ip }} 8080
-        ExecStart=/opt/bin/kube-proxy \
-        --master={{ k8s_master.default_ip }}:8080 \
-        --logtostderr=true
-        Restart=always
-        RestartSec=10
-    - name: kube-kubelet.service
-      command: start
-      content: |
-        [Unit]
-        Description=Kubernetes Kubelet
-        Documentation=https://github.com/GoogleCloudPlatform/kubernetes
-        Requires=setup-network-environment.service
-        After=setup-network-environment.service
-        [Service]
-        EnvironmentFile=/etc/network-environment
-        ExecStartPre=/usr/bin/curl -L -o /opt/bin/kubelet -z /opt/bin/kubelet https://storage.googleapis.com/kubernetes-release/release/v1.2.4/bin/linux/amd64/kubelet
-        ExecStartPre=/usr/bin/chmod +x /opt/bin/kubelet
-        # wait for kubernetes master to be up and ready
-        ExecStartPre=/opt/bin/wupiao {{ k8s_master.default_ip }} 8080
-        ExecStart=/opt/bin/kubelet \
-        --address=0.0.0.0 \
-        --port=10250 \
-        --cluster-dns=10.0.0.10 \
-        --cluster-domain=cluster.local \
-        --hostname-override=${DEFAULT_IPV4} \
-        --api-servers={{ k8s_master.default_ip }}:8080 \
-        --tls-cert-file=/opt/bin/kubelet.crt \
-        --tls-private-key-file=/opt/bin/kubelet.key \
-        --allow-privileged=true \
-        --logtostderr=true \
-        --cadvisor-port=4194 \
-        --healthz-bind-address=0.0.0.0 \
-        --healthz-port=10248
-        Restart=always
-        RestartSec=10
+        Type=simple
+        StartLimitInterval=0
+        Restart=on-failure
+        ExecStartPre=/usr/bin/curl -k https://{{ k8s_master.default_ip }}:6443/version
+        ExecStart=/opt/bin/deploy-kube-system
+
   update:
-    group: alpha
+    group: stable
     reboot-strategy: off
