@@ -15,6 +15,98 @@
  */
 package com.cloud.containercluster;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.math.BigInteger;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.MalformedURLException;
+import java.net.Socket;
+import java.net.URL;
+import java.net.UnknownHostException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.InvalidKeyException;
+import java.security.KeyFactory;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.PrivateKey;
+import java.security.SecureRandom;
+import java.security.Security;
+import java.security.SignatureException;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.CertificateParsingException;
+import java.security.cert.X509Certificate;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import javax.inject.Inject;
+import javax.naming.ConfigurationException;
+import javax.security.auth.x500.X500Principal;
+
+import org.apache.cloudstack.acl.ControlledEntity;
+import org.apache.cloudstack.acl.SecurityChecker;
+import org.apache.cloudstack.api.ApiErrorCode;
+import org.apache.cloudstack.api.BaseCmd;
+import org.apache.cloudstack.api.ServerApiException;
+import org.apache.cloudstack.api.command.user.containercluster.CreateContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.DeleteContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCACertCmd;
+import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.StartContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.StopContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.firewall.CreateFirewallRuleCmd;
+import org.apache.cloudstack.api.command.user.vm.StartVMCmd;
+import org.apache.cloudstack.api.response.ContainerClusterResponse;
+import org.apache.cloudstack.api.response.ListResponse;
+import org.apache.cloudstack.context.CallContext;
+import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
+import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
+import org.apache.cloudstack.framework.security.keystore.KeystoreDao;
+import org.apache.cloudstack.framework.security.keystore.KeystoreVO;
+import org.apache.cloudstack.managed.context.ManagedContextRunnable;
+import org.apache.cloudstack.network.tls.CertService;
+import org.apache.commons.codec.binary.Base64;
+import org.apache.log4j.Logger;
+import org.bouncycastle.asn1.ASN1Encodable;
+import org.bouncycastle.asn1.DERSequence;
+import org.bouncycastle.asn1.x509.GeneralName;
+import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
+import org.bouncycastle.asn1.x509.X509Extensions;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.util.io.pem.PemObject;
+import org.bouncycastle.util.io.pem.PemReader;
+import org.bouncycastle.util.io.pem.PemWriter;
+import org.bouncycastle.x509.X509V1CertificateGenerator;
+import org.bouncycastle.x509.X509V3CertificateGenerator;
+import org.bouncycastle.x509.extension.AuthorityKeyIdentifierStructure;
+import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.FlywayException;
+import org.joda.time.DateTime;
+import org.joda.time.DateTimeZone;
+
 import com.cloud.api.ApiDBUtils;
 import com.cloud.capacity.CapacityManager;
 import com.cloud.containercluster.dao.ContainerClusterDao;
@@ -102,96 +194,6 @@ import com.cloud.vm.VMInstanceVO;
 import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.dao.UserVmDao;
 import com.cloud.vm.dao.VMInstanceDao;
-import org.apache.cloudstack.acl.ControlledEntity;
-import org.apache.cloudstack.acl.SecurityChecker;
-import org.apache.cloudstack.api.ApiErrorCode;
-import org.apache.cloudstack.api.BaseCmd;
-import org.apache.cloudstack.api.ServerApiException;
-import org.apache.cloudstack.api.command.user.containercluster.CreateContainerClusterCmd;
-import org.apache.cloudstack.api.command.user.containercluster.DeleteContainerClusterCmd;
-import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCACertCmd;
-import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
-import org.apache.cloudstack.api.command.user.containercluster.StartContainerClusterCmd;
-import org.apache.cloudstack.api.command.user.containercluster.StopContainerClusterCmd;
-import org.apache.cloudstack.api.command.user.firewall.CreateFirewallRuleCmd;
-import org.apache.cloudstack.api.command.user.vm.StartVMCmd;
-import org.apache.cloudstack.api.response.ContainerClusterResponse;
-import org.apache.cloudstack.api.response.ListResponse;
-import org.apache.cloudstack.context.CallContext;
-import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
-import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
-import org.apache.cloudstack.framework.security.keystore.KeystoreDao;
-import org.apache.cloudstack.framework.security.keystore.KeystoreVO;
-import org.apache.cloudstack.managed.context.ManagedContextRunnable;
-import org.apache.cloudstack.network.tls.CertService;
-import org.apache.commons.codec.binary.Base64;
-import org.apache.log4j.Logger;
-import org.bouncycastle.asn1.ASN1Encodable;
-import org.bouncycastle.asn1.DERSequence;
-import org.bouncycastle.asn1.x509.GeneralName;
-import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
-import org.bouncycastle.asn1.x509.X509Extensions;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.util.io.pem.PemObject;
-import org.bouncycastle.util.io.pem.PemReader;
-import org.bouncycastle.util.io.pem.PemWriter;
-import org.bouncycastle.x509.X509V1CertificateGenerator;
-import org.bouncycastle.x509.X509V3CertificateGenerator;
-import org.bouncycastle.x509.extension.AuthorityKeyIdentifierStructure;
-import org.flywaydb.core.Flyway;
-import org.flywaydb.core.api.FlywayException;
-import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
-
-import javax.inject.Inject;
-import javax.naming.ConfigurationException;
-import javax.security.auth.x500.X500Principal;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.io.StringReader;
-import java.io.StringWriter;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.math.BigInteger;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.MalformedURLException;
-import java.net.Socket;
-import java.net.URL;
-import java.net.UnknownHostException;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.security.InvalidKeyException;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.PrivateKey;
-import java.security.SecureRandom;
-import java.security.Security;
-import java.security.SignatureException;
-import java.security.cert.CertificateEncodingException;
-import java.security.cert.CertificateParsingException;
-import java.security.cert.X509Certificate;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class ContainerClusterManagerImpl extends ManagerBase implements ContainerClusterManager, ContainerClusterService {
 
@@ -572,7 +574,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         setupContainerClusterNetworkRules(publicIp, account, containerClusterId, k8sMasterVM.getId());
 
         int retryCounter = 0;
-        int maxRetries = 10;
+        int maxRetries = 30;
         boolean k8sApiServerSetup = false;
 
         while (retryCounter < maxRetries) {
@@ -587,7 +589,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 if (s_logger.isDebugEnabled()) {
                     s_logger.debug("Waiting for container cluster: " + containerCluster.getName() + " API endpoint to be available. retry: " + retryCounter + "/" + maxRetries);
                 }
-                try { Thread.sleep(50000); } catch (InterruptedException ex) {}
+                try { Thread.sleep(60000); } catch (InterruptedException ex) {}
                 retryCounter++;
             }
         }
@@ -595,7 +597,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         if (k8sApiServerSetup) {
 
             retryCounter = 0;
-            maxRetries = 10;
+            maxRetries = 30;
             // Dashbaord service is a docker image downloaded at run time.
             // So wait for some time and check if dashbaord service is up running.
             while (retryCounter < maxRetries) {
@@ -610,7 +612,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
 
                     containerCluster = _containerClusterDao.findById(containerClusterId);
-                    containerCluster.setConsoleEndpoint("https://" + publicIp.getAddress() + "/api/v1/proxy/namespaces/kube-system/services/kubernetes-dashboard");
+                    containerCluster.setConsoleEndpoint("https://" + publicIp.getAddress() + "/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy#!/overview?namespace=kube-system");
                     _containerClusterDao.update(containerCluster.getId(), containerCluster);
 
                     if (s_logger.isDebugEnabled()) {
@@ -620,7 +622,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     return true;
                 }
 
-                try { Thread.sleep(30000);} catch (InterruptedException ex) {}
+                try { Thread.sleep(10000);} catch (InterruptedException ex) {}
                 retryCounter++;
             }
             s_logger.warn("Failed to setup container cluster " + containerCluster.getName() + " in usable state as" +
@@ -820,7 +822,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                             new PortForwardingRuleVO(null, publicIpId,
                                     443, 443,
                                     masterIpFinal,
-                                    443, 443,
+                                    6443, 6443,
                                     "tcp", networkId, accountId, domainId, masterVmIdFinal);
                     newRule.setDisplay(true);
                     newRule.setState(FirewallRule.State.Add);
@@ -1088,8 +1090,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         int nodePort = 0;
         try {
             ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
-            String execStr = "kubectl -s https://" + publicIp.getAddress().addr() + "/ --username=admin "
-                    + " --password=" + clusterDetails.getPassword()
+            String execStr = "kubectl -s https://admin:" + clusterDetails.getPassword() + "@" + publicIp.getAddress().addr() + "/"
                     + " get pods --insecure-skip-tls-verify=true --namespace=kube-system";
             Process p = r.exec(execStr);
             p.waitFor();
