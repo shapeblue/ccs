@@ -626,10 +626,6 @@
 
                                             var dashboardUrl = endPoint;
                                             var popOut = '<p align="right"><a href="' + dashboardUrl + '" target="_blank">Pop-out ↗</a></p>';
-                                            if (username && password) {
-                                                popOut += '<p align="left">Username: ' + username + '<br/>';
-                                                popOut += 'Password: ' + password + '</p><br/>';
-                                            }
                                             var iframe = popOut + '<iframe src="';
                                             var iframeArgs = '" width="770" height="560")>';
                                             return jQuery(iframe.concat(dashboardUrl, iframeArgs));

@@ -2,21 +2,6 @@
 
 ---
 write-files:
-  - path: /opt/bin/ca.crt
-    permissions: '0644'
-    content: |
-      {{ k8s_node.ca.crt }}
-
-  - path: /opt/bin/kubelet.crt
-    permissions: '0644'
-    content: |
-      {{ k8s_node.client.crt }}
-
-  - path: /opt/bin/kubelet.key
-    permissions: '0644'
-    content: |
-      {{ k8s_node.client.key }}
-
   - path: /opt/bin/setup-kube-system
     permissions: 0700
     owner: root:root
@@ -51,7 +36,7 @@ write-files:
     content: |
       #!/bin/bash -e
       export PATH=$PATH:/opt/bin
-      /opt/bin/kubeadm join {{ k8s_master.default_ip }}:6443 --token a4qgg6.84hjisyqzvth7yp6 --discovery-token-unsafe-skip-ca-verification
+      kubeadm join {{ k8s_master.default_ip }}:6443 --token a4qgg6.84hjisyqzvth7yp6 --discovery-token-unsafe-skip-ca-verification
 
 coreos:
   units:
@@ -75,7 +60,6 @@ coreos:
       command: start
       content: |
         [Unit]
-        Requires=setup-kube-system.service
         After=setup-kube-system.service
 
         [Service]

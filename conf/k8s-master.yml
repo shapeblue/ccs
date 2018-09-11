@@ -74,9 +74,11 @@ write-files:
       kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.10.0/Documentation/kube-flannel.yml
       kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v1.10.0/src/deploy/recommended/kubernetes-dashboard.yaml
 
-      kubectl create rolebinding admin-binding --role=admin --user=admin
-      kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=admin
-      kubectl create clusterrolebinding kubernetes-dashboard --clusterrole=cluster-admin --serviceaccount=kube-system:kubernetes-dashboard
+      kubectl create rolebinding admin-binding --role=admin --user=admin || true
+      kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=admin || true
+      kubectl create clusterrolebinding kubernetes-dashboard --clusterrole=cluster-admin --serviceaccount=kube-system:kubernetes-dashboard || true
+
+      kubectl proxy --port=6442 --address=0.0.0.0 --accept-hosts='^.*$' --accept-paths='^/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard.*$'
 
 coreos:
   units:
@@ -100,7 +102,6 @@ coreos:
       command: start
       content: |
         [Unit]
-        Requires=setup-kube-system.service
         After=setup-kube-system.service
 
         [Service]

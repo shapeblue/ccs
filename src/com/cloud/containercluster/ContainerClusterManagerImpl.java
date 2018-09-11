@@ -579,10 +579,10 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         while (retryCounter < maxRetries) {
             try (Socket socket = new Socket()) {
-                socket.connect(new InetSocketAddress(publicIp.getAddress().addr(), 443), 10000);
+                socket.connect(new InetSocketAddress(publicIp.getAddress().addr(), 6443), 10000);
                 k8sApiServerSetup = true;
                 containerCluster = _containerClusterDao.findById(containerClusterId);
-                containerCluster.setEndpoint("https://" + publicIp.getAddress() + "/");
+                containerCluster.setEndpoint("https://" + publicIp.getAddress() + ":6443/");
                 _containerClusterDao.update(containerCluster.getId(), containerCluster);
                 break;
             } catch (IOException e) {
@@ -612,7 +612,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
 
                     containerCluster = _containerClusterDao.findById(containerClusterId);
-                    containerCluster.setConsoleEndpoint("https://" + publicIp.getAddress() + "/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy#!/overview?namespace=kube-system");
+                    containerCluster.setConsoleEndpoint("http://" + publicIp.getAddress() + ":6442/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy#!/overview?namespace=_all");
                     _containerClusterDao.update(containerCluster.getId(), containerCluster);
 
                     if (s_logger.isDebugEnabled()) {
@@ -708,7 +708,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         boolean k8sApiServerSetup = false;
         while (retryCounter < maxRetries) {
             try (Socket socket = new Socket()) {
-                socket.connect(new InetSocketAddress(address.getHostAddress(), 443), 10000);
+                socket.connect(new InetSocketAddress(address.getHostAddress(), 6443), 10000);
                 k8sApiServerSetup = true;
                 break;
             } catch (IOException e) {
@@ -732,7 +732,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return true;
     }
 
-    // Open up  firewall port 443, secure port on which kubernetes API server is running. Also create portforwarding
+    // Open up  firewall port 6443, secure port on which kubernetes API server is running. Also create portforwarding
     // rule to forward public IP traffic to master VM private IP
     private void setupContainerClusterNetworkRules(IPAddressVO publicIp, Account account, long containerClusterId,
                                                    long masterVmId) throws  ManagementServerException {
@@ -756,11 +756,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
             Field startPortField = rule.getClass().getDeclaredField("publicStartPort");
             startPortField.setAccessible(true);
-            startPortField.set(rule, new Integer(443));
+            startPortField.set(rule, new Integer(6442));
 
             Field endPortField = rule.getClass().getDeclaredField("publicEndPort");
             endPortField.setAccessible(true);
-            endPortField.set(rule, new Integer(443));
+            endPortField.set(rule, new Integer(6443));
 
             Field cidrField = rule.getClass().getDeclaredField("cidrlist");
             cidrField.setAccessible(true);
@@ -770,7 +770,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             _firewallService.applyIngressFwRules(publicIp.getId(), account);
 
             if (s_logger.isDebugEnabled()) {
-                s_logger.debug("Provisioned firewall rule to open up port 443 on " + publicIp.getAddress() +
+                s_logger.debug("Provisioned firewall rule to open up port 6443 on " + publicIp.getAddress() +
                         " for cluster " + containerCluster.getName());
             }
         } catch (RuntimeException rte) {
@@ -820,9 +820,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 public PortForwardingRuleVO doInTransaction(TransactionStatus status) throws NetworkRuleConflictException {
                     PortForwardingRuleVO newRule =
                             new PortForwardingRuleVO(null, publicIpId,
-                                    443, 443,
+                                    6442, 6443,
                                     masterIpFinal,
-                                    6443, 6443,
+                                    6442, 6443,
                                     "tcp", networkId, accountId, domainId, masterVmIdFinal);
                     newRule.setDisplay(true);
                     newRule.setState(FirewallRule.State.Add);
@@ -833,7 +833,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             _rulesService.applyPortForwardingRules(publicIp.getId(), account);
 
             if (s_logger.isDebugEnabled()) {
-                s_logger.debug("Provisioning port forwarding rule from port 443 on " + publicIp.getAddress() +
+                s_logger.debug("Provisioning port forwarding rule from port 6443 on " + publicIp.getAddress() +
                         " to the master VM IP :" + masterIpFinal + " in container cluster " + containerCluster.getName());
             }
         } catch (RuntimeException rte) {
@@ -886,7 +886,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             Integer startPort = rule.getSourcePortStart();
             Integer endPort = rule.getSourcePortEnd();
             s_logger.debug("Network rule : " + startPort + " " + endPort);
-            if (startPort <= 443 && 443 <= endPort) {
+            if (startPort <= 6443 && 6443 <= endPort) {
                 throw new InvalidParameterValueException("The network id:" + network.getId() + " has conflicting firewall rules to provision" +
                         " container cluster." );
             }
@@ -897,7 +897,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             Integer startPort = rule.getSourcePortStart();
             Integer endPort = rule.getSourcePortEnd();
             s_logger.debug("Network rule : " + startPort + " " + endPort);
-            if (startPort <= 443 && 443 <= endPort) {
+            if (startPort <= 6443 && 6443 <= endPort) {
                 throw new InvalidParameterValueException("The network id:" + network.getId() + " has conflicting port forwarding rules to provision" +
                         " container cluster." );
             }
@@ -1090,7 +1090,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         int nodePort = 0;
         try {
             ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
-            String execStr = "kubectl -s https://admin:" + clusterDetails.getPassword() + "@" + publicIp.getAddress().addr() + "/"
+            String execStr = "kubectl -s https://admin:" + clusterDetails.getPassword() + "@" + publicIp.getAddress().addr() + ":6443/"
                     + " get pods --insecure-skip-tls-verify=true --namespace=kube-system";
             Process p = r.exec(execStr);
             p.waitFor();
