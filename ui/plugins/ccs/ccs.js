@@ -584,11 +584,11 @@
                                             isCopyPaste: true
                                         },
                                         username: {
-                                            label: 'username',
+                                            label: 'label.username',
                                             isCopyPaste: true
                                         },
                                         password: {
-                                            label: 'password',
+                                            label: 'label.password',
                                             isCopyPaste: true
                                         }
                                     }],
@@ -627,7 +627,7 @@
                                             var dashboardUrl = endPoint;
                                             var popOut = '<p align="right"><a href="' + dashboardUrl + '" target="_blank">Pop-out ↗</a></p>';
                                             var iframe = popOut + '<iframe src="';
-                                            var iframeArgs = '" width="770" height="560")>';
+                                            var iframeArgs = '" width="950" height="560")>';
                                             return jQuery(iframe.concat(dashboardUrl, iframeArgs));
                                         };
 
