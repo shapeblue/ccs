@@ -583,7 +583,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
 
                     containerCluster = _containerClusterDao.findById(containerClusterId);
-                    containerCluster.setConsoleEndpoint("http://" + publicIp.getAddress() + ":6442/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy#!/overview?namespace=_all");
+                    containerCluster.setConsoleEndpoint("http://" + publicIp.getAddress() + ":6443/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy#!/overview?namespace=_all");
                     _containerClusterDao.update(containerCluster.getId(), containerCluster);
 
                     if (s_logger.isDebugEnabled()) {
@@ -727,7 +727,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
             Field startPortField = rule.getClass().getDeclaredField("publicStartPort");
             startPortField.setAccessible(true);
-            startPortField.set(rule, new Integer(6442));
+            startPortField.set(rule, new Integer(6443));
 
             Field endPortField = rule.getClass().getDeclaredField("publicEndPort");
             endPortField.setAccessible(true);
@@ -791,9 +791,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 public PortForwardingRuleVO doInTransaction(TransactionStatus status) throws NetworkRuleConflictException {
                     PortForwardingRuleVO newRule =
                             new PortForwardingRuleVO(null, publicIpId,
-                                    6442, 6443,
+                                    6443, 6443,
                                     masterIpFinal,
-                                    6442, 6443,
+                                    6443, 6443,
                                     "tcp", networkId, accountId, domainId, masterVmIdFinal);
                     newRule.setDisplay(true);
                     newRule.setState(FirewallRule.State.Add);

@@ -54,12 +54,10 @@ write-files:
       systemctl enable kubelet && systemctl start kubelet
       sysctl net.bridge.bridge-nf-call-iptables=1
 
-      cp /etc/kubernetes/pki/cloudstack/ca.crt /etc/ssl/certs/cloudstack.pem
-      update-ca-certificates
-
       kubeadm config images pull
       kubeadm init --pod-network-cidr=10.244.0.0/16 --token a4qgg6.84hjisyqzvth7yp6
       sed -i '/allow-privileged=true/a \ \ \ \ - --basic-auth-file=/etc/kubernetes/pki/auth.csv' /etc/kubernetes/manifests/kube-apiserver.yaml
+      sed -i 's/--authorization-mode=.*/--authorization-mode=AlwaysAllow/g' /etc/kubernetes/manifests/kube-apiserver.yaml
 
   - path: /opt/bin/deploy-kube-system
     permissions: 0700
@@ -80,8 +78,6 @@ write-files:
       kubectl create rolebinding admin-binding --role=admin --user=admin || true
       kubectl create clusterrolebinding cluster-admin-binding --clusterrole=cluster-admin --user=admin || true
       kubectl create clusterrolebinding kubernetes-dashboard --clusterrole=cluster-admin --serviceaccount=kube-system:kubernetes-dashboard || true
-
-      kubectl proxy --port=6442 --address=0.0.0.0 --accept-hosts='^.*$' --accept-paths='^/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard.*$'
 
 coreos:
   units:
