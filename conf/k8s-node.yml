@@ -36,6 +36,10 @@ write-files:
     owner: root:root
     content: |
       #!/bin/bash -e
+      modprobe ip_vs
+      modprobe ip_vs_wrr
+      modprobe ip_vs_sh
+      modprobe nf_conntrack_ipv4
       export PATH=$PATH:/opt/bin
       kubeadm join {{ k8s_master.default_ip }}:6443 --token a4qgg6.84hjisyqzvth7yp6 --discovery-token-unsafe-skip-ca-verification
 

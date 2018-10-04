@@ -583,7 +583,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
 
                     containerCluster = _containerClusterDao.findById(containerClusterId);
-                    containerCluster.setConsoleEndpoint("http://" + publicIp.getAddress() + ":6443/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy#!/overview?namespace=_all");
+                    containerCluster.setConsoleEndpoint("https://" + publicIp.getAddress() + ":6443/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy#!/overview?namespace=_all");
                     _containerClusterDao.update(containerCluster.getId(), containerCluster);
 
                     if (s_logger.isDebugEnabled()) {
