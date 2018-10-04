@@ -7,6 +7,8 @@ write-files:
     owner: root:root
     content: |
       #!/bin/bash -e
+      export PATH=$PATH:/opt/bin
+
       CNI_VERSION="v0.7.1"
       mkdir -p /opt/cni/bin
       curl -L "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-amd64-${CNI_VERSION}.tgz" | tar -C /opt/cni/bin -xz
@@ -15,7 +17,7 @@ write-files:
       mkdir -p /opt/bin
       curl -L "https://github.com/kubernetes-incubator/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-amd64.tar.gz" | tar -C /opt/bin -xz
 
-      RELEASE="$(curl -sSL https://dl.k8s.io/release/stable.txt)"
+      RELEASE="v1.11.3"
       mkdir -p /opt/bin
       cd /opt/bin
       curl -L --remote-name-all https://storage.googleapis.com/kubernetes-release/release/${RELEASE}/bin/linux/amd64/{kubeadm,kubelet,kubectl}
@@ -27,8 +29,7 @@ write-files:
       systemctl enable kubelet && systemctl start kubelet
       sysctl net.bridge.bridge-nf-call-iptables=1
 
-      export PATH=$PATH:/opt/bin
-      /opt/bin/kubeadm config images pull
+      kubeadm config images pull
 
   - path: /opt/bin/deploy-kube-system
     permissions: 0700

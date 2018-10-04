@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 ShapeBlue Ltd
+ * Copyright 2016-2018 ShapeBlue Ltd
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
     var rootCaCert = "";
     var downloadCaCert = function() {
         var blob = new Blob([rootCaCert], {type: 'application/x-x509-ca-cert'});
-        var filename = "cloudstack-containerservice.pem";
+        var filename = "cloudstack-ca.pem";
         if(window.navigator.msSaveOrOpenBlob) {
             window.navigator.msSaveBlob(blob, filename);
         } else{
@@ -116,39 +116,6 @@
 
                         // List view actions
                         actions: {
-                            showCACert: {
-                                label: 'Download CA Certificate',
-                                isHeader: true,
-                                messages: {
-                                    notification: function(args) {
-                                        return 'Download Container Service Root CA Certificate';
-                                    }
-                                },
-                                createForm: {
-                                    title: 'Download Container Service Root CA Certificate?',
-                                    fields: {
-                                        certificate: {
-                                            label: 'label.certificate',
-                                            isTextarea: true,
-                                            defaultValue: function(args) {
-                                                $.ajax({
-                                                    url: createURL("listContainerClusterCACert"),
-                                                    dataType: "json",
-                                                    async: false,
-                                                    success: function(json) {
-                                                        rootCaCert = json.listcontainerclustercacertresponse.rootcacert.certificate;
-                                                    }
-                                                });
-                                                return rootCaCert;
-                                            }
-                                        }
-                                    }
-                                },
-                                action: function(args) {
-                                    downloadCaCert();
-                                    args.response.success({});
-                                },
-                            },
                             add: {
                                 label: 'Add container cluster',
                                 createForm: {
@@ -665,11 +632,11 @@
                                                     'style': 'height: 40px',
                                                     click: function() {
                                                         $.ajax({
-                                                            url: createURL("listContainerClusterCACert"),
+                                                            url: createURL("listCaCertificate"),
                                                             dataType: "json",
                                                             async: false,
                                                             success: function(json) {
-                                                                rootCaCert = json.listcontainerclustercacertresponse.rootcacert.certificate;
+                                                                rootCaCert = json.listcacertificateresponse.cacertificates.certificate;
                                                             }
                                                         });
                                                         downloadCaCert();

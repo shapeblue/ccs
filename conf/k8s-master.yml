@@ -12,18 +12,18 @@ write-files:
     content: |
       {{ k8s_master.password }},{{ k8s_master.user }},1
 
-  - path: /opt/bin/ca.crt
+  - path: /etc/kubernetes/pki/cloudstack/ca.crt
     permissions: '0644'
     content: |
       {{ k8s_master.ca.crt }}
 
-  - path: /opt/bin/kube-apiserver.crt
+  - path: /etc/kubernetes/pki/cloudstack/apiserver.crt
     permissions: '0644'
     content: |
       {{ k8s_master.apiserver.crt }}
 
-  - path: /opt/bin/kube-apiserver.key
-    permissions: '0644'
+  - path: /etc/kubernetes/pki/cloudstack/apiserver.key
+    permissions: '0600'
     content: |
       {{ k8s_master.apiserver.key }}
 
@@ -42,7 +42,7 @@ write-files:
       mkdir -p /opt/bin
       curl -L "https://github.com/kubernetes-incubator/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-amd64.tar.gz" | tar -C /opt/bin -xz
 
-      RELEASE="$(curl -sSL https://dl.k8s.io/release/stable.txt)"
+      RELEASE="v1.11.3"
       mkdir -p /opt/bin
       cd /opt/bin
       curl -L --remote-name-all https://storage.googleapis.com/kubernetes-release/release/${RELEASE}/bin/linux/amd64/{kubeadm,kubelet,kubectl}
@@ -53,6 +53,9 @@ write-files:
       curl -sSL "https://raw.githubusercontent.com/kubernetes/kubernetes/${RELEASE}/build/debs/10-kubeadm.conf" | sed "s:/usr/bin:/opt/bin:g" > /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
       systemctl enable kubelet && systemctl start kubelet
       sysctl net.bridge.bridge-nf-call-iptables=1
+
+      cp /etc/kubernetes/pki/cloudstack/ca.crt /etc/ssl/certs/cloudstack.pem
+      update-ca-certificates
 
       kubeadm config images pull
       kubeadm init --pod-network-cidr=10.244.0.0/16 --token a4qgg6.84hjisyqzvth7yp6

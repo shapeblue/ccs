@@ -19,7 +19,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.io.StringReader;
 import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -35,22 +34,9 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.security.InvalidKeyException;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.PrivateKey;
 import java.security.SecureRandom;
-import java.security.Security;
-import java.security.SignatureException;
-import java.security.cert.CertificateEncodingException;
-import java.security.cert.CertificateParsingException;
-import java.security.cert.X509Certificate;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,7 +50,6 @@ import java.util.regex.Pattern;
 
 import javax.inject.Inject;
 import javax.naming.ConfigurationException;
-import javax.security.auth.x500.X500Principal;
 
 import org.apache.cloudstack.acl.ControlledEntity;
 import org.apache.cloudstack.acl.SecurityChecker;
@@ -73,7 +58,6 @@ import org.apache.cloudstack.api.BaseCmd;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.command.user.containercluster.CreateContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.DeleteContainerClusterCmd;
-import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCACertCmd;
 import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.StartContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.StopContainerClusterCmd;
@@ -81,31 +65,17 @@ import org.apache.cloudstack.api.command.user.firewall.CreateFirewallRuleCmd;
 import org.apache.cloudstack.api.command.user.vm.StartVMCmd;
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.cloudstack.api.response.ListResponse;
+import org.apache.cloudstack.ca.CAManager;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.cloudstack.engine.orchestration.service.NetworkOrchestrationService;
+import org.apache.cloudstack.framework.ca.Certificate;
 import org.apache.cloudstack.framework.config.dao.ConfigurationDao;
-import org.apache.cloudstack.framework.security.keystore.KeystoreDao;
-import org.apache.cloudstack.framework.security.keystore.KeystoreVO;
 import org.apache.cloudstack.managed.context.ManagedContextRunnable;
-import org.apache.cloudstack.network.tls.CertService;
+import org.apache.cloudstack.utils.security.CertUtils;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.log4j.Logger;
-import org.bouncycastle.asn1.ASN1Encodable;
-import org.bouncycastle.asn1.DERSequence;
-import org.bouncycastle.asn1.x509.GeneralName;
-import org.bouncycastle.asn1.x509.SubjectKeyIdentifier;
-import org.bouncycastle.asn1.x509.X509Extensions;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.util.io.pem.PemObject;
-import org.bouncycastle.util.io.pem.PemReader;
-import org.bouncycastle.util.io.pem.PemWriter;
-import org.bouncycastle.x509.X509V1CertificateGenerator;
-import org.bouncycastle.x509.X509V3CertificateGenerator;
-import org.bouncycastle.x509.extension.AuthorityKeyIdentifierStructure;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.FlywayException;
-import org.joda.time.DateTime;
-import org.joda.time.DateTimeZone;
 
 import com.cloud.api.ApiDBUtils;
 import com.cloud.capacity.CapacityManager;
@@ -132,6 +102,7 @@ import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.host.Host.Type;
 import com.cloud.host.HostVO;
 import com.cloud.network.IpAddress;
+import com.cloud.network.IpAddressManager;
 import com.cloud.network.Network;
 import com.cloud.network.Network.Service;
 import com.cloud.network.NetworkModel;
@@ -195,7 +166,7 @@ import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.dao.UserVmDao;
 import com.cloud.vm.dao.VMInstanceDao;
 
-public class ContainerClusterManagerImpl extends ManagerBase implements ContainerClusterManager, ContainerClusterService {
+public class ContainerClusterManagerImpl extends ManagerBase implements ContainerClusterService {
 
     private static final Logger s_logger = Logger.getLogger(ContainerClusterManagerImpl.class);
 
@@ -205,7 +176,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     ScheduledExecutorService _stateScanner;
 
     @Inject
-    protected KeystoreDao keystoreDao;
+    protected CAManager caManager;
     @Inject
     protected ContainerClusterDao _containerClusterDao;
     @Inject
@@ -273,7 +244,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     @Inject
     FirewallRulesDao _firewallDao;
     @Inject
-    protected CertService certService;
+    protected IpAddressManager ipAddressManager;
 
     @Override
     public ContainerCluster findById(final Long id) {
@@ -500,7 +471,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         UserVm k8sMasterVM = null;
         try {
-            k8sMasterVM = createK8SMaster(containerCluster, publicIp);
+            k8sMasterVM = createK8SMaster(containerCluster, ips);
 
             final long clusterId = containerCluster.getId();
             final long masterVmId = k8sMasterVM.getId();
@@ -692,7 +663,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
         }
 
-        InetAddress address=null;
+        InetAddress address = null;
         try {
             address = InetAddress.getByName(new URL(containerCluster.getEndpoint()).getHost());
         } catch (MalformedURLException | UnknownHostException ex) {
@@ -1254,7 +1225,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         _containerClusterDao.update(cluster.getId(), cluster);
     }
 
-    UserVm createK8SMaster(final ContainerClusterVO containerCluster, final IPAddressVO publicIP) throws ManagementServerException,
+    UserVm createK8SMaster(final ContainerClusterVO containerCluster, final List<IPAddressVO> ips) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
 
         UserVm masterVm = null;
@@ -1268,7 +1239,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         Account owner = _accountDao.findById(containerCluster.getAccountId());
 
-        Network.IpAddresses addrs = new Network.IpAddresses(null, null);
+        final String masterIp = ipAddressManager.acquireGuestIpAddress(_networkDao.findById(containerCluster.getNetworkId()), null);
+        Network.IpAddresses addrs = new Network.IpAddresses(masterIp, null);
 
         Map<String, String> customparameterMap = new HashMap<String, String>();
 
@@ -1285,16 +1257,23 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             final String apiServerKey = "{{ k8s_master.apiserver.key }}";
             final String caCert = "{{ k8s_master.ca.crt }}";
 
-            final KeystoreVO rootCA = keystoreDao.findByName(CCS_ROOTCA_KEYPAIR);
-            final PrivateKey rootCAPrivateKey = pemToRSAPrivateKey(rootCA.getKey());
-            final X509Certificate rootCACert = pemToX509Cert(rootCA.getCertificate());
-            final KeyPair keyPair = generateRandomKeyPair();
-            final String tlsClientCert = x509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, publicIP.getAddress().addr(), true));
-            final String tlsPrivateKey = rsaPrivateKeyToPem(keyPair.getPrivate());
+            final List<String> addresses = new ArrayList<>();
+            addresses.add(masterIp);
+            for (final IPAddressVO ip : ips) {
+                addresses.add(ip.getAddress().addr());
+            }
+
+            final Certificate certificate = caManager.issueCertificate(null, Arrays.asList(hostName, "kubernetes",
+                    "kubernetes.default", "kubernetes.default.svc", "kubernetes.default.svc.cluster", "kubernetes.default.svc.cluster.local"),
+                    addresses, 3650, null);
+
+            final String tlsClientCert = CertUtils.x509CertificateToPem(certificate.getClientCertificate());
+            final String tlsPrivateKey = CertUtils.privateKeyToPem(certificate.getPrivateKey());
+            final String tlsCaCert = CertUtils.x509CertificatesToPem(certificate.getCaCertificates());
 
             k8sMasterConfig = k8sMasterConfig.replace(apiServerCert, tlsClientCert.replace("\n", "\n      "));
             k8sMasterConfig = k8sMasterConfig.replace(apiServerKey, tlsPrivateKey.replace("\n", "\n      "));
-            k8sMasterConfig = k8sMasterConfig.replace(caCert, rootCA.getCertificate().replace("\n", "\n      "));
+            k8sMasterConfig = k8sMasterConfig.replace(caCert, tlsCaCert.replace("\n", "\n      "));
 
             ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
             k8sMasterConfig = k8sMasterConfig.replace(password, clusterDetails.getPassword());
@@ -1347,21 +1326,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             String nodeCloudConfig = _globalConfigDao.getValue(CcsConfig.ContainerClusterNodeCloudConfig.key());
             k8sNodeConfig = readFile(nodeCloudConfig).toString();
             String masterIPString = "{{ k8s_master.default_ip }}";
-            final String clientCert = "{{ k8s_node.client.crt }}";
-            final String clientKey = "{{ k8s_node.client.key }}";
-            final String caCert = "{{ k8s_node.ca.crt }}";
-
-            final KeystoreVO rootCA = keystoreDao.findByName(CCS_ROOTCA_KEYPAIR);
-            final PrivateKey rootCAPrivateKey = pemToRSAPrivateKey(rootCA.getKey());
-            final X509Certificate rootCACert = pemToX509Cert(rootCA.getCertificate());
-            final KeyPair keyPair = generateRandomKeyPair();
-            final String tlsClientCert = x509CertificateToPem(generateClientCertificate(rootCAPrivateKey, rootCACert, keyPair, "", false));
-            final String tlsPrivateKey = rsaPrivateKeyToPem(keyPair.getPrivate());
 
             k8sNodeConfig = k8sNodeConfig.replace(masterIPString, masterIp);
-            k8sNodeConfig = k8sNodeConfig.replace(clientCert, tlsClientCert.replace("\n", "\n      "));
-            k8sNodeConfig = k8sNodeConfig.replace(clientKey, tlsPrivateKey.replace("\n", "\n      "));
-            k8sNodeConfig = k8sNodeConfig.replace(caCert, rootCA.getCertificate().replace("\n", "\n      "));
 
             ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
 
@@ -1685,7 +1651,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         cmdList.add(StopContainerClusterCmd.class);
         cmdList.add(DeleteContainerClusterCmd.class);
         cmdList.add(ListContainerClusterCmd.class);
-        cmdList.add(ListContainerClusterCACertCmd.class);
         return cmdList;
     }
 
@@ -1896,118 +1861,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         _gcExecutor = Executors.newScheduledThreadPool(1, new NamedThreadFactory("Container-Cluster-Scavenger"));
         _stateScanner = Executors.newScheduledThreadPool(1, new NamedThreadFactory("Container-Cluster-State-Scanner"));
 
-        final KeystoreVO keyStoreVO = keystoreDao.findByName(CCS_ROOTCA_KEYPAIR);
-        if (keyStoreVO == null) {
-                try {
-                    final KeyPair keyPair = generateRandomKeyPair();
-                    final String rootCACert = x509CertificateToPem(generateRootCACertificate(keyPair));
-                    final String rootCAKey = rsaPrivateKeyToPem(keyPair.getPrivate());
-                    keystoreDao.save(CCS_ROOTCA_KEYPAIR, rootCACert, rootCAKey, "");
-                    s_logger.info("No Container Cluster CA stores found, created and saved a keypair with certificate: \n" + rootCACert);
-                } catch (NoSuchProviderException | NoSuchAlgorithmException | CertificateEncodingException | SignatureException | InvalidKeyException | IOException e) {
-                    s_logger.error("Unable to create and save CCS rootCA keypair: " + e.toString());
-                }
-        }
         return true;
-    }
-
-    public X509Certificate generateRootCACertificate(KeyPair keyPair) throws NoSuchAlgorithmException, NoSuchProviderException, CertificateEncodingException, SignatureException, InvalidKeyException {
-        final DateTime now = DateTime.now(DateTimeZone.UTC);
-        final X500Principal dnName = new X500Principal(CCS_ROOTCA_CN);
-        final X509V1CertificateGenerator certGen = new X509V1CertificateGenerator();
-        certGen.setSerialNumber(BigInteger.valueOf(System.currentTimeMillis()));
-        certGen.setSubjectDN(dnName);
-        certGen.setIssuerDN(dnName);
-        certGen.setNotBefore(now.minusDays(1).toDate());
-        certGen.setNotAfter(now.plusYears(50).toDate());
-        certGen.setPublicKey(keyPair.getPublic());
-        certGen.setSignatureAlgorithm("SHA256WithRSAEncryption");
-        return certGen.generate(keyPair.getPrivate(), "BC");
-    }
-
-    public X509Certificate generateClientCertificate(final PrivateKey rootCAPrivateKey, final X509Certificate rootCACert,
-                                                     final KeyPair keyPair, final String publicIPAddress, final boolean isMasterNode) throws IOException, CertificateParsingException, InvalidKeyException, NoSuchAlgorithmException, CertificateEncodingException, NoSuchProviderException, SignatureException, InvalidKeySpecException {
-        final DateTime now = DateTime.now(DateTimeZone.UTC);
-        final X509V3CertificateGenerator certGen = new X509V3CertificateGenerator();;
-        certGen.setSerialNumber(BigInteger.valueOf(System.currentTimeMillis()));
-        certGen.setIssuerDN(new X500Principal(CCS_ROOTCA_CN));
-        certGen.setSubjectDN(new X500Principal(CCS_CLUSTER_CN));
-        certGen.setNotBefore(now.minusDays(1).toDate());
-        certGen.setNotAfter(now.plusYears(10).toDate());
-        certGen.setPublicKey(keyPair.getPublic());
-        certGen.setSignatureAlgorithm("SHA256WithRSAEncryption");
-        certGen.addExtension(X509Extensions.AuthorityKeyIdentifier, false,
-                new AuthorityKeyIdentifierStructure(rootCACert));
-        certGen.addExtension(X509Extensions.SubjectKeyIdentifier, false,
-                new SubjectKeyIdentifier(keyPair.getPublic().getEncoded()));
-
-        if (isMasterNode) {
-            final List<ASN1Encodable> subjectAlternativeNames = new ArrayList<ASN1Encodable>();
-            subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, publicIPAddress));
-            subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, "10.0.0.1"));
-            subjectAlternativeNames.add(new GeneralName(GeneralName.iPAddress, "10.1.1.1"));
-            subjectAlternativeNames.add(new GeneralName(GeneralName.dNSName, "kubernetes"));
-            subjectAlternativeNames.add(new GeneralName(GeneralName.dNSName, "kubernetes.default"));
-            subjectAlternativeNames.add(new GeneralName(GeneralName.dNSName, "kubernetes.default.svc"));
-            subjectAlternativeNames.add(new GeneralName(GeneralName.dNSName, "kubernetes.default.svc.cluster.local"));
-
-            final DERSequence subjectAlternativeNamesExtension = new DERSequence(
-                    subjectAlternativeNames.toArray(new ASN1Encodable[subjectAlternativeNames.size()]));
-            certGen.addExtension(X509Extensions.SubjectAlternativeName, false,
-                    subjectAlternativeNamesExtension);
-        }
-
-        return certGen.generate(rootCAPrivateKey, "BC");
-    }
-
-    public KeyPair generateRandomKeyPair() throws NoSuchProviderException, NoSuchAlgorithmException {
-        Security.addProvider(new BouncyCastleProvider());
-        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA", "BC");
-        keyPairGenerator.initialize(2048, new SecureRandom());
-        return keyPairGenerator.generateKeyPair();
-    }
-
-    public KeyFactory getKeyFactory() {
-        KeyFactory keyFactory = null;
-        try {
-            Security.addProvider(new BouncyCastleProvider());
-            keyFactory = KeyFactory.getInstance("RSA", "BC");
-        } catch (NoSuchAlgorithmException | NoSuchProviderException e) {
-            s_logger.error("Unable to create KeyFactory:" + e.getMessage());
-        }
-        return keyFactory;
-    }
-
-    public X509Certificate pemToX509Cert(final String pem) throws IOException {
-        return (X509Certificate) certService.parseCertificate(pem);
-    }
-
-    /**
-     * @deprecated this should move to {@link CertService}
-     */
-    @Deprecated
-    public String x509CertificateToPem(final X509Certificate cert) throws IOException, CertificateEncodingException {
-        try (StringWriter sw = new StringWriter()) {
-            try (PemWriter pemWriter = new PemWriter(sw)) {
-                pemWriter.writeObject(new PemObject("CERTIFICATE", cert.getEncoded()));
-            }
-        return sw.toString();
-        }
-    }
-
-    public PrivateKey pemToRSAPrivateKey(final String pem) throws InvalidKeySpecException, IOException {
-        final PemReader pr = new PemReader(new StringReader(pem));
-        final PemObject pemObject = pr.readPemObject();
-        final KeyFactory keyFactory = getKeyFactory();
-        return keyFactory.generatePrivate(new PKCS8EncodedKeySpec(pemObject.getContent()));
-    }
-
-    public String rsaPrivateKeyToPem(final PrivateKey key) throws IOException {
-        final PemObject pemObject = new PemObject(CCS_RSA_PRIVATE_KEY, key.getEncoded());
-        final StringWriter sw = new StringWriter();
-        try (final PemWriter pw = new PemWriter(sw)) {
-            pw.writeObject(pemObject);
-        }
-        return sw.toString();
     }
 }
