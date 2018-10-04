@@ -80,9 +80,7 @@ echo "Running through post-install ccs pkg steps"
 if [ -f /usr/share/cloudstack-management/webapp/plugins/plugins.js ]; then
     if ! grep -q ccs /usr/share/cloudstack-management/webapp/plugins/plugins.js; then
         echo "Enabling CloudStack Container Service UI Plugin"
-        rm -f /usr/share/cloudstack-management/webapp/plugins/plugins.js.gz
         sed -i  "/cloudStack.plugins/a 'ccs'," /usr/share/cloudstack-management/webapp/plugins/plugins.js
-        gzip -c /usr/share/cloudstack-management/webapp/plugins/plugins.js > /usr/share/cloudstack-management/webapp/plugins/plugins.js.gz
         echo "CloudStack Container Service UI Plugin successfully enabled"
     fi
 fi
@@ -93,9 +91,7 @@ if [ "$1" == "0" ] ; then
     if [ -f /usr/share/cloudstack-management/webapp/plugins/plugins.js ]; then
         if grep -q ccs /usr/share/cloudstack-management/webapp/plugins/plugins.js; then
             echo "Disabling CloudStack Container Service UI Plugin"
-            rm -f /usr/share/cloudstack-management/webapp/plugins/plugins.js.gz
             sed -i  "/'ccs'/d" /usr/share/cloudstack-management/webapp/plugins/plugins.js
-            gzip -c /usr/share/cloudstack-management/webapp/plugins/plugins.js > /usr/share/cloudstack-management/webapp/plugins/plugins.js.gz
         fi
     fi
 fi
