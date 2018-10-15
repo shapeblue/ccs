@@ -113,15 +113,15 @@ parser.add_argument("-s", "--secretfile", help="A readable text file containing 
 
 args = parser.parse_args()
 
-package_url='http://downloads.shapeblue.com/ccs/1.0/templates/'
+package_url='http://dl.openvm.eu/cloudstack/coreos/x86_64/'
 hypervisors = ['XenServer', 'KVM', 'VMware', 'HyperV', 'OVM']
 image_formats = { 'XenServer': 'VHD', 'KVM' : 'QCOW2', 'HyperV' : 'VMDK',  'OVM' : 'RAW', 'VMware' : 'OVA' }
 url_name = {\
-        'XenServer': 'coreos-1010.5.0-xen.shapeblue.vhd.bz2',\
-        'KVM' : 'coreos-1010.5.0-kvm.shapeblue.qcow2.bz2',\
-        'HyperV' : 'None',\
+        'XenServer': 'coreos_production_cloudstack_image-xen.vhd.bz2',\
+        'KVM' : 'coreos_production_cloudstack_image-kvm.qcow2.bz2',\
+        'HyperV' : 'coreos_production_cloudstack_image-hyperv.vhd.zip',\
         'OVM' : 'None',\
-        'VMware' : 'coreos-1010.5.0-vmware.shapeblue.ova' }
+        'VMware' : 'coreos_production_cloudstack_image-vmware.ova' }
 
 format = None
 
