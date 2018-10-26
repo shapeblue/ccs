@@ -17,7 +17,7 @@ write-files:
       mkdir -p /opt/bin
       curl -L "https://github.com/kubernetes-incubator/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-amd64.tar.gz" | tar -C /opt/bin -xz
 
-      RELEASE="v1.11.3"
+      RELEASE="v1.11.4"
       mkdir -p /opt/bin
       cd /opt/bin
       curl -L --remote-name-all https://storage.googleapis.com/kubernetes-release/release/${RELEASE}/bin/linux/amd64/{kubeadm,kubelet,kubectl}
