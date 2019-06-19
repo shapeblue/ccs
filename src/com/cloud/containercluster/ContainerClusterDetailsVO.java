@@ -84,6 +84,14 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
         this.registryEmail = registryEmail;
     }
 
+    public String getKubeConfigData() {
+        return kubeConfigData;
+    }
+
+    public void setKubeConfigData(String kubeConfigData) {
+        this.kubeConfigData = kubeConfigData;
+    }
+
     public boolean getNetworkCleanup() {
         return networkCleanup;
     }
@@ -125,6 +133,9 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
 
     @Column(name = "registry_email")
     String registryEmail;
+
+    @Column(name = "kube_config_data", length = 65535)
+    String kubeConfigData;
 
     @Column(name = "network_cleanup")
     boolean networkCleanup;

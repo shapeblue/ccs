@@ -87,7 +87,6 @@ public class ListContainerClusterCmd extends BaseListCmd {
 
     @Override
     public void execute() {
-
         ListResponse<ContainerClusterResponse> response = _containerClusterService.listContainerClusters(this);
         response.setResponseName(getCommandName());
         setResponseObject(response);

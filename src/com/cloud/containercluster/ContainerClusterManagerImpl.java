@@ -15,9 +15,8 @@
  */
 package com.cloud.containercluster;
 
-import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.Field;
@@ -58,11 +57,13 @@ import org.apache.cloudstack.api.BaseCmd;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.command.user.containercluster.CreateContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.DeleteContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.GetContainerClusterConfigCmd;
 import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.StartContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.StopContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.firewall.CreateFirewallRuleCmd;
 import org.apache.cloudstack.api.command.user.vm.StartVMCmd;
+import org.apache.cloudstack.api.response.ContainerClusterConfigResponse;
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.cloudstack.api.response.ListResponse;
 import org.apache.cloudstack.ca.CAManager;
@@ -156,6 +157,7 @@ import com.cloud.utils.db.TransactionStatus;
 import com.cloud.utils.fsm.NoTransitionException;
 import com.cloud.utils.fsm.StateMachine2;
 import com.cloud.utils.net.Ip;
+import com.cloud.utils.ssh.SshHelper;
 import com.cloud.vm.Nic;
 import com.cloud.vm.ReservationContext;
 import com.cloud.vm.ReservationContextImpl;
@@ -165,6 +167,7 @@ import com.cloud.vm.VMInstanceVO;
 import com.cloud.vm.VirtualMachine;
 import com.cloud.vm.dao.UserVmDao;
 import com.cloud.vm.dao.VMInstanceDao;
+import com.google.common.base.Strings;
 
 public class ContainerClusterManagerImpl extends ManagerBase implements ContainerClusterService {
 
@@ -565,8 +568,42 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
         }
 
+        boolean k8sKubeConfigCopied = false;
         if (k8sApiServerSetup) {
+            Runtime r = Runtime.getRuntime();
+            retryCounter = 0;
+            maxRetries = 5;
+            String kubeConfig = "";
+            while (retryCounter < maxRetries && kubeConfig.isEmpty()) {
+                try {
+                    Boolean devel = Boolean.valueOf(_globalConfigDao.getValue("developer"));
+                    String keyFile = String.format("%s/.ssh/id_rsa", System.getProperty("user.home"));
+                    if (devel) {
+                        keyFile += ".cloud";
+                    }
+                    File pkFile = new File(keyFile);
+                    Pair<Boolean, String> result = SshHelper.sshExecute(publicIp.getAddress().addr(), 2222, "core",
+                            pkFile, null, "sudo cat /etc/kubernetes/admin.conf",
+                            10000, 10000, 10000);
 
+                    if(result.first() && !Strings.isNullOrEmpty(result.second())) {
+                        kubeConfig = result.second();
+                        kubeConfig = kubeConfig.replace(String.format("server: https://%s:6443", k8sMasterVM.getPrivateIpAddress()),
+                                String.format("server: https://%s:6443", publicIp.getAddress().addr()));
+                        ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
+                        clusterDetails.setKubeConfigData(Base64.encodeBase64String(kubeConfig.getBytes(Charset.forName("UTF-8"))));
+                        _containerClusterDetailsDao.persist(clusterDetails);
+                        k8sKubeConfigCopied = true;
+                        break;
+                    }
+                } catch (Exception e) {
+                    s_logger.warn("Failed to retrieve kube-config file for cluster with ID " + containerCluster.getUuid() + ": " + e);
+                }
+                retryCounter++;
+            }
+        }
+
+        if (k8sKubeConfigCopied) {
             retryCounter = 0;
             maxRetries = 30;
             // Dashbaord service is a docker image downloaded at run time.
@@ -758,6 +795,51 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                     "cluster: " + containerCluster.getName());
         }
 
+        try {
+            CreateFirewallRuleCmd rule = new CreateFirewallRuleCmd();
+            rule = ComponentContext.inject(rule);
+
+            Field addressField = rule.getClass().getDeclaredField("ipAddressId");
+            addressField.setAccessible(true);
+            addressField.set(rule, publicIp.getId());
+
+            Field protocolField = rule.getClass().getDeclaredField("protocol");
+            protocolField.setAccessible(true);
+            protocolField.set(rule, "TCP");
+
+            Field startPortField = rule.getClass().getDeclaredField("publicStartPort");
+            startPortField.setAccessible(true);
+            startPortField.set(rule, new Integer(2222));
+
+            Field endPortField = rule.getClass().getDeclaredField("publicEndPort");
+            endPortField.setAccessible(true);
+            endPortField.set(rule, new Integer(2222));
+
+            Field cidrField = rule.getClass().getDeclaredField("cidrlist");
+            cidrField.setAccessible(true);
+            cidrField.set(rule, sourceCidrList);
+
+            _firewallService.createIngressFirewallRule(rule);
+            _firewallService.applyIngressFwRules(publicIp.getId(), account);
+
+            if (s_logger.isDebugEnabled()) {
+                s_logger.debug("Provisioned firewall rule to open up port 2222 on " + publicIp.getAddress() +
+                        " for cluster " + containerCluster.getName());
+            }
+        } catch (RuntimeException rte) {
+            s_logger.warn("Failed to provision firewall rules for the container cluster: " + containerCluster.getName()
+                    + " due to exception: " + getStackTrace(rte));
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+            throw new ManagementServerException("Failed to provision firewall rules for the container " +
+                    "cluster: " + containerCluster.getName(), rte);
+        } catch (Exception e) {
+            s_logger.warn("Failed to provision firewall rules for the container cluster: " + containerCluster.getName()
+                    + " due to exception: " + getStackTrace(e));
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+            throw new ManagementServerException("Failed to provision firewall rules for the container " +
+                    "cluster: " + containerCluster.getName());
+        }
+
         Nic masterVmNic = _networkModel.getNicInNetwork(masterVmId, containerCluster.getNetworkId());
         // handle Nic interface method change between releases 4.5 and 4.6 and above through reflection
         Method m = null;
@@ -815,6 +897,38 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             s_logger.warn("Failed to activate port forwarding rules for the container cluster " + containerCluster.getName() + " due to "  + e);
             stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
             throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName(), e);
+        }
+
+        try {
+            PortForwardingRuleVO pfRule = Transaction.execute(new TransactionCallbackWithException<PortForwardingRuleVO, NetworkRuleConflictException>() {
+                @Override
+                public PortForwardingRuleVO doInTransaction(TransactionStatus status) throws NetworkRuleConflictException {
+                    PortForwardingRuleVO newRule =
+                            new PortForwardingRuleVO(null, publicIpId,
+                                    2222, 2222,
+                                    masterIpFinal,
+                                    22, 22,
+                                    "tcp", networkId, accountId, domainId, masterVmIdFinal);
+                    newRule.setDisplay(true);
+                    newRule.setState(FirewallRule.State.Add);
+                    newRule = _portForwardingDao.persist(newRule);
+                    return newRule;
+                }
+            });
+            _rulesService.applyPortForwardingRules(publicIp.getId(), account);
+
+            if (s_logger.isDebugEnabled()) {
+                s_logger.debug("Provisioning SSH port forwarding rule from port 2222 to 22 on " + publicIp.getAddress() +
+                        " to the master VM IP :" + masterIpFinal + " in container cluster " + containerCluster.getName());
+            }
+        } catch (RuntimeException rte) {
+            s_logger.warn("Failed to activate SSH port forwarding rules for the container cluster " + containerCluster.getName() + " due to "  + rte);
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+            throw new ManagementServerException("Failed to activate SSH port forwarding rules for the cluster: " + containerCluster.getName(), rte);
+        } catch (Exception e) {
+            s_logger.warn("Failed to activate SSH port forwarding rules for the container cluster " + containerCluster.getName() + " due to "  + e);
+            stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
+            throw new ManagementServerException("Failed to activate SSH port forwarding rules for the cluster: " + containerCluster.getName(), e);
         }
     }
 
@@ -1060,30 +1174,29 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         Runtime r = Runtime.getRuntime();
         int nodePort = 0;
         try {
-            ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
-            String execStr = "kubectl -s https://admin:" + clusterDetails.getPassword() + "@" + publicIp.getAddress().addr() + ":6443/"
-                    + " get pods --insecure-skip-tls-verify=true --namespace=kube-system";
-            Process p = r.exec(execStr);
-            p.waitFor();
-            BufferedReader b = new BufferedReader(new InputStreamReader(p.getInputStream(), "UTF8"));
-            String line = "";
-            while ((line = b.readLine()) != null) {
-                if (s_logger.isDebugEnabled()) {
-                    s_logger.debug("KUBECTL : " + line);
-                }
-                if (line.contains(svcName) && line.contains("Running")) {
-                    if (s_logger.isDebugEnabled()) {
-                        s_logger.debug("Service :" + svcName + " for the container cluster "
-                                + containerCluster.getName() + " is running");
+            Boolean devel = Boolean.valueOf(_globalConfigDao.getValue("developer"));
+            String keyFile = String.format("%s/.ssh/id_rsa", System.getProperty("user.home"));
+            if (devel) {
+                keyFile += ".cloud";
+            }
+            File pkFile = new File(keyFile);
+            Pair<Boolean, String> result = SshHelper.sshExecute(publicIp.getAddress().addr(), 2222, "core",
+                    pkFile, null, "sudo kubectl get pods --namespace=kube-system",
+                    10000, 10000, 10000);
+            if (result.first() && !Strings.isNullOrEmpty(result.second())) {
+                String[] lines = result.second().split("\n");
+                for (String line:
+                     lines) {
+                    if (line.contains(svcName) && line.contains("Running")) {
+                        if (s_logger.isDebugEnabled()) {
+                            s_logger.debug("Service :" + svcName + " for the container cluster "
+                                    + containerCluster.getName() + " is running");
+                        }
+                        return true;
                     }
-                    b.close();
-                    return true;
                 }
             }
-            b.close();
-        } catch (IOException excep) {
-            s_logger.warn("KUBECTL: " + excep);
-        } catch (InterruptedException e) {
+        } catch (Exception e) {
             s_logger.warn("KUBECTL: " + e);
         }
         return false;
@@ -1251,11 +1364,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             String masterCloudConfig = _globalConfigDao.getValue(CcsConfig.ContainerClusterMasterCloudConfig.key());
             k8sMasterConfig = readFile(masterCloudConfig);
 
-            final String user = "{{ k8s_master.user }}";
-            final String password = "{{ k8s_master.password }}";
             final String apiServerCert = "{{ k8s_master.apiserver.crt }}";
             final String apiServerKey = "{{ k8s_master.apiserver.key }}";
             final String caCert = "{{ k8s_master.ca.crt }}";
+            final String msSshPubKey = "{{ k8s_master.ms.ssh.pub.key }}";
+            final String clusterIp = "{{ k8s_master.cluster.ip }}";
+
 
             final List<String> addresses = new ArrayList<>();
             addresses.add(masterIp);
@@ -1275,9 +1389,18 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             k8sMasterConfig = k8sMasterConfig.replace(apiServerKey, tlsPrivateKey.replace("\n", "\n      "));
             k8sMasterConfig = k8sMasterConfig.replace(caCert, tlsCaCert.replace("\n", "\n      "));
 
-            ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
-            k8sMasterConfig = k8sMasterConfig.replace(password, clusterDetails.getPassword());
-            k8sMasterConfig = k8sMasterConfig.replace(user, clusterDetails.getUserName());
+            String pubKey = "- \""+_globalConfigDao.getValue("ssh.publickey")+"\"";
+
+            String sshKeyPair = containerCluster.getKeyPair();
+            if(!Strings.isNullOrEmpty(sshKeyPair)) {
+                SSHKeyPairVO sshkp = _sshKeyPairDao.findByName(owner.getAccountId(), owner.getDomainId(), sshKeyPair);
+                if (sshkp != null) {
+                    pubKey += "\n  - \""+sshkp.getPublicKey()+"\"";
+                }
+            }
+            k8sMasterConfig = k8sMasterConfig.replace(msSshPubKey, pubKey);
+
+            k8sMasterConfig = k8sMasterConfig.replace(clusterIp, String.format("--apiserver-cert-extra-sans=%s", ips.get(0).getAddress().toString()));
         } catch (RuntimeException e ) {
             s_logger.error("Failed to read kubernetes master configuration file due to " + e);
             throw new ManagementServerException("Failed to read kubernetes master configuration file", e);
@@ -1299,7 +1422,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         return masterVm;
     }
-
 
     UserVm createK8SNode(ContainerClusterVO containerCluster, String masterIp, int nodeInstance) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
@@ -1483,6 +1605,22 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return response;
     }
 
+    public ContainerClusterConfigResponse getContainerClusterConfig(GetContainerClusterConfigCmd cmd) {
+        ContainerClusterConfigResponse response = new ContainerClusterConfigResponse();
+        ContainerCluster containerCluster = _containerClusterDao.findById(cmd.getId());
+        if (containerCluster!=null) {
+            response.setId(containerCluster.getUuid());
+            response.setName(containerCluster.getName());
+            ContainerClusterDetails containerClusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
+            if(containerClusterDetails!=null) {
+                String configData = new java.lang.String(Base64.decodeBase64(containerClusterDetails.getKubeConfigData()));
+                response.setConfigData(configData);
+            }
+        }
+        response.setObjectName("clusterconfig");
+        return response;
+    }
+
     public ContainerClusterResponse createContainerClusterResponse(long containerClusterId) {
 
         ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
@@ -1540,12 +1678,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         }
 
         response.setVirtualMachineIds(vmIds);
-
-        ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
-        if (clusterDetails != null) {
-            response.setUsername(clusterDetails.getUserName());
-            response.setPassword(clusterDetails.getPassword());
-        }
 
         return response;
     }
@@ -1651,6 +1783,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         cmdList.add(StopContainerClusterCmd.class);
         cmdList.add(DeleteContainerClusterCmd.class);
         cmdList.add(ListContainerClusterCmd.class);
+        cmdList.add(GetContainerClusterConfigCmd.class);
         return cmdList;
     }
 

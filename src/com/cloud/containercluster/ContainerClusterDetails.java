@@ -24,4 +24,5 @@ public interface ContainerClusterDetails {
     long getClusterId();
     String getUserName();
     String getPassword();
+    String getKubeConfigData();
 }
