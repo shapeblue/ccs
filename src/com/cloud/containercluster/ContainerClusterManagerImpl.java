@@ -1856,9 +1856,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         VMTemplateVO iso = _templateDao.findOneBy(sc);
         if (iso == null) {
             s_logger.warn("Binaries ISO with name :" + isoName + " specified by admin is not found.");
-            return false;
         }
-        long isoId = entityManager.findByUuid(VirtualMachineTemplate.class, "bfaa0fe5-e0a3-4a8b-803c-0c84ae6904ee").getId();
 
         List<String> services = _ntwkOfferingServiceMapDao.listServicesForNetworkOffering(networkOffering.getId());
         if (services == null || services.isEmpty() || !services.contains("SourceNat")) {
