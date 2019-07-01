@@ -520,6 +520,35 @@
                                     notification: {
                                         poll: pollAsyncJobResult
                                     }
+                                },
+                                downloadKubeConfig: {
+                                    label: 'Download Cluster Config',
+                                    compactLabel: 'label.configuration',
+                                    messages: {
+                                        notification: function(args) {
+                                            return 'Download cluster config';
+                                        }
+                                    },
+                                    action: function(args) {
+                                        var data = {
+                                            id: args.context.containerclusters[0].id
+                                        }
+                                        $.ajax({
+                                            url: createURL("getContainerClusterConfig"),
+                                            dataType: "json",
+                                            data: data,
+                                            async: false,
+                                            success: function(json) {
+                                                var jsonObj;
+                                                if (json.getcontainerclusterconfigresponse.clusterconfig != null &&
+                                                    json.getcontainerclusterconfigresponse.clusterconfig.configdata != null ) {
+                                                    jsonObj = json.getcontainerclusterconfigresponse.clusterconfig;
+                                                    clusterKubeConfig = jsonObj.configdata ;
+                                                }
+                                            }
+                                        });
+                                        downloadClusterKubeConfig();
+                                    }
                                 }
                             },
                             tabs: {
@@ -617,9 +646,10 @@
                                                     async: true,
                                                     success: function(json) {
                                                         var jsonObj;
-                                                        if (json.getcontainerclusterconfigresponse.configdata != null && json.getcontainerclusterconfigresponse.configdata > 0) {
-                                                            jsonObj = json.getcontainerclusterconfigresponse;
-                                                            clusterKubeConfig = jsonObj.configdata;
+                                                        if (json.getcontainerclusterconfigresponse.clusterconfig != null &&
+                                                            json.getcontainerclusterconfigresponse.clusterconfig.configdata != null ) {
+                                                            jsonObj = json.getcontainerclusterconfigresponse.clusterconfig;
+                                                            clusterKubeConfig = jsonObj.configdata ;
                                                             args.response.success({
                                                                 data: jsonObj
                                                             });
@@ -627,6 +657,7 @@
                                                     }
                                                 });
                                                 return jQuery('<br><p>').html("Access container cluster<br>Download Config File<br><br>How to do this<br><code>kubectl --kubeconfig /custom/path/kube.config get pods</code>");
+                                                // return jQuery('<br><p>').html("Access container cluster<br>Download Config File<br><br>How to do this<br><code>kubectl --kubeconfig /custom/path/kube.config get pods</code>");
                                             }
 
                                             return jQuery('<br><p>').html("Container cluster is not in a stable state, please check again in few minutes.");
@@ -771,6 +802,7 @@
             if (jsonObj.state == "Stopped") {
                 allowedActions.push("start");
             } else {
+                allowedActions.push("downloadKubeConfig");
                 allowedActions.push("stop");
             }
             allowedActions.push("destroy");
