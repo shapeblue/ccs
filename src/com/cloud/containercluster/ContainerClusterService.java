@@ -16,15 +16,18 @@
 // under the License.
 package com.cloud.containercluster;
 
+import org.apache.cloudstack.api.command.user.containercluster.GetContainerClusterConfigCmd;
+import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
+import org.apache.cloudstack.api.response.ContainerClusterConfigResponse;
+import org.apache.cloudstack.api.response.ContainerClusterResponse;
+import org.apache.cloudstack.api.response.ListResponse;
+
 import com.cloud.exception.InsufficientCapacityException;
 import com.cloud.exception.ManagementServerException;
 import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
 import com.cloud.user.Account;
 import com.cloud.utils.component.PluggableService;
-import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
-import org.apache.cloudstack.api.response.ContainerClusterResponse;
-import org.apache.cloudstack.api.response.ListResponse;
 
 public interface ContainerClusterService extends PluggableService {
 
@@ -53,6 +56,8 @@ public interface ContainerClusterService extends PluggableService {
     boolean deleteContainerCluster(Long containerClusterId) throws ManagementServerException;
 
     ListResponse<ContainerClusterResponse>  listContainerClusters(ListContainerClusterCmd cmd);
+
+    ContainerClusterConfigResponse  getContainerClusterConfig(GetContainerClusterConfigCmd cmd);
 
     ContainerClusterResponse createContainerClusterResponse(long containerClusterId);
 

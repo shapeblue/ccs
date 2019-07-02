@@ -31,6 +31,21 @@
             document.body.removeChild(elem);
         }
     };
+    var clusterKubeConfig = "";
+    var downloadClusterKubeConfig = function() {
+        var blob = new Blob([clusterKubeConfig], {type: 'text/plain'});
+        var filename = "admin.conf";
+        if(window.navigator.msSaveOrOpenBlob) {
+            window.navigator.msSaveBlob(blob, filename);
+        } else{
+            var elem = window.document.createElement('a');
+            elem.href = window.URL.createObjectURL(blob);
+            elem.download = filename;
+            document.body.appendChild(elem)
+            elem.click();
+            document.body.removeChild(elem);
+        }
+    };
     cloudStack.plugins.ccs = function(plugin) {
         plugin.ui.addSection({
             id: 'ccs',
@@ -505,6 +520,35 @@
                                     notification: {
                                         poll: pollAsyncJobResult
                                     }
+                                },
+                                downloadKubeConfig: {
+                                    label: 'Download Cluster Config',
+                                    compactLabel: 'label.configuration',
+                                    messages: {
+                                        notification: function(args) {
+                                            return 'Download cluster config';
+                                        }
+                                    },
+                                    action: function(args) {
+                                        var data = {
+                                            id: args.context.containerclusters[0].id
+                                        }
+                                        $.ajax({
+                                            url: createURL("getContainerClusterConfig"),
+                                            dataType: "json",
+                                            data: data,
+                                            async: false,
+                                            success: function(json) {
+                                                var jsonObj;
+                                                if (json.getcontainerclusterconfigresponse.clusterconfig != null &&
+                                                    json.getcontainerclusterconfigresponse.clusterconfig.configdata != null ) {
+                                                    jsonObj = json.getcontainerclusterconfigresponse.clusterconfig;
+                                                    clusterKubeConfig = jsonObj.configdata ;
+                                                }
+                                            }
+                                        });
+                                        downloadClusterKubeConfig();
+                                    }
                                 }
                             },
                             tabs: {
@@ -578,76 +622,46 @@
                                     }
                                 },
                                 console : {
-                                    title: 'Dashboard',
+                                    title: 'Access',
                                     custom : function (args) {
                                         var showDashboard = function() {
-                                            var endPoint = args.context.containerclusters[0].consoleendpoint;
-                                            var username = args.context.containerclusters[0].username;
-                                            var password = args.context.containerclusters[0].password;
-                                            var protocol = endPoint.split("://")[0] + "://";
-                                            var uri = endPoint.split("://")[1];
+                                            var state = args.context.containerclusters[0].state;
 
-                                            if (!endPoint) {
+                                            if (state == "Created" || state == "Starting") { // Starting
                                                 return jQuery('<br><p>').html("Container cluster setup is under progress, please check again in few minutes.");
                                             }
 
-                                            var dashboardUrl = endPoint;
-                                            var popOut = '<p align="right"><a href="' + dashboardUrl + '" target="_blank">Pop-out ↗</a></p>';
-                                            var iframe = popOut + '<iframe src="';
-                                            var iframeArgs = '" width="950" height="560")>';
-                                            return jQuery(iframe.concat(dashboardUrl, iframeArgs));
-                                        };
+                                            if (state == "Stopped" || state == "Stopping") { // Starting
+                                                return jQuery('<br><p>').html("Container cluster setup is under progress, please check again in few minutes.");
+                                            }
 
-                                        var showNotice = function(msg) {
-                                            var msg = "The dashboard gives a GUI that allows you to deploy your containerized applications within your container clusters using Kubernetes. In order to be able to access the dashboard from your browser, you need to import the container cluster root CA certificate in your browser.";
-                                            var links = [
-                                                {name: 'Chrome on Windows', url: 'https://support.globalsign.com/customer/portal/articles/1211541-install-client-digital-certificate---windows-using-chrome'},
-                                                {name: 'Firefox on Windows', url: 'https://support.globalsign.com/customer/portal/articles/1211486-install-client-digital-certificate---firefox-for-windows'},
-                                                {name: 'IE on Windows', url: 'https://msdn.microsoft.com/en-us/library/cc750534.aspx'}
-                                            ];
-                                            var linkMessage = $('<br><br><span>').html("You may use the following links for step-by-step instructions on importing root CA certificate in following browsers:");
-                                            $.each(links, function(idx, item) {
-                                                linkMessage.append($('<br><br><a href="' + item.url + '">').html(item.name));
-                                            });
-                                            return $(
-                                                $('<span>').addClass('message').html(msg)
-                                            ).dialog({
-                                                title: "Have you installed CA certificate?",
-                                                dialogClass: args.isWarning ? 'confirm warning': 'confirm',
-                                                closeOnEscape: false,
-                                                zIndex: 5000,
-                                                buttons: [{
-                                                    text: "I've imported the certificate",
-                                                    'class': 'cancel',
-                                                    'style': 'height: 40px',
-                                                    click: function() {
-                                                        $.cookie('ccs.show.cacert.msg', '1');
-                                                        $(this).dialog('destroy');
-                                                        $('div.overlay').remove();
-                                                        $('.hovered-elem').hide();
+                                            if (state == "Running") { // Running
+                                                var data = {
+                                                    id: args.context.containerclusters[0].id
+                                                }
+                                                $.ajax({
+                                                    url: createURL("getContainerClusterConfig"),
+                                                    dataType: "json",
+                                                    data: data,
+                                                    async: true,
+                                                    success: function(json) {
+                                                        var jsonObj;
+                                                        if (json.getcontainerclusterconfigresponse.clusterconfig != null &&
+                                                            json.getcontainerclusterconfigresponse.clusterconfig.configdata != null ) {
+                                                            jsonObj = json.getcontainerclusterconfigresponse.clusterconfig;
+                                                            clusterKubeConfig = jsonObj.configdata ;
+                                                            args.response.success({
+                                                                data: jsonObj
+                                                            });
+                                                        }
                                                     }
-                                                }, {
-                                                    text: "Download CA Certificate",
-                                                    'class': 'ok',
-                                                    'style': 'height: 40px',
-                                                    click: function() {
-                                                        $.ajax({
-                                                            url: createURL("listCaCertificate"),
-                                                            dataType: "json",
-                                                            async: false,
-                                                            success: function(json) {
-                                                                rootCaCert = json.listcacertificateresponse.cacertificates.certificate;
-                                                            }
-                                                        });
-                                                        downloadCaCert();
-                                                    }
-                                                }]
-                                            }).closest('.ui-dialog').overlay();
-                                        };
+                                                });
+                                                return jQuery('<br><p>').html("Access container cluster<br>Download Config File<br><br>How to do this<br><code>kubectl --kubeconfig /custom/path/kube.config get pods</code>");
+                                                // return jQuery('<br><p>').html("Access container cluster<br>Download Config File<br><br>How to do this<br><code>kubectl --kubeconfig /custom/path/kube.config get pods</code>");
+                                            }
 
-                                        if (!$.cookie('ccs.show.cacert.msg')) {
-                                          showNotice();
-                                        }
+                                            return jQuery('<br><p>').html("Container cluster is not in a stable state, please check again in few minutes.");
+                                        };
                                         return showDashboard();
                                     }
                                 },
@@ -788,6 +802,7 @@
             if (jsonObj.state == "Stopped") {
                 allowedActions.push("start");
             } else {
+                allowedActions.push("downloadKubeConfig");
                 allowedActions.push("stop");
             }
             allowedActions.push("destroy");

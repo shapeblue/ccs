@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS `cloud`.`sb_ccs_container_cluster_details` (
     `registry_password` varchar(255),
     `registry_url` varchar(255),
     `registry_email` varchar(255),
+    `kube_config_data` text COMMENT 'configuration file data of this cluster',
     `network_cleanup` tinyint unsigned NOT NULL DEFAULT 1 COMMENT 'true if network needs to be clean up on deletion of container cluster. Should be false if user specfied network for the cluster',
 
     PRIMARY KEY(`id`),
@@ -100,3 +101,6 @@ INSERT IGNORE INTO `cloud`.`guest_os` (id, uuid, category_id, display_name, crea
 INSERT IGNORE INTO `cloud`.`guest_os_hypervisor` (uuid,hypervisor_type, hypervisor_version, guest_os_name, guest_os_id, created, is_user_defined) VALUES (UUID(),'XenServer', 'default', 'CoreOS', 255, utc_timestamp(), 0);
 INSERT IGNORE INTO `cloud`.`guest_os_hypervisor` (uuid,hypervisor_type, hypervisor_version, guest_os_name, guest_os_id, created, is_user_defined) VALUES (UUID(),'VmWare', 'default', 'coreos64Guest', 255, utc_timestamp(), 0);
 INSERT IGNORE INTO `cloud`.`guest_os_hypervisor` (uuid,hypervisor_type, hypervisor_version, guest_os_name, guest_os_id, created, is_user_defined) VALUES (UUID(),'KVM', 'default', 'CoreOS', 255, utc_timestamp(), 0);
+
+INSERT IGNORE INTO `cloud`.`configuration` VALUES ('Advanced', 'DEFAULT', 'management-server',
+'cloud.container.cluster.binaries.iso.name', 'ShapeBlue-CCS-Binaries-ISO' , 'Name of the ISO that contains k8s binaries and docker images for offline installation.', 'ShapeBlue-CCS-Binaries-ISO', NULL , NULL, 0);
