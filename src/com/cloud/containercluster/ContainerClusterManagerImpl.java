@@ -59,6 +59,7 @@ import org.apache.cloudstack.api.command.user.containercluster.CreateContainerCl
 import org.apache.cloudstack.api.command.user.containercluster.DeleteContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.GetContainerClusterConfigCmd;
 import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.ScaleContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.StartContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.StopContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.firewall.CreateFirewallRuleCmd;
@@ -836,7 +837,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
             Field endPortField = rule.getClass().getDeclaredField("publicEndPort");
             endPortField.setAccessible(true);
-            endPortField.set(rule, new Integer(2222 + clusterVMIds.size()));
+            endPortField.set(rule, new Integer(2222 + clusterVMIds.size() - 1)); // clusterVMIds contains all nodes including master
 
             Field cidrField = rule.getClass().getDeclaredField("cidrlist");
             cidrField.setAccessible(true);
@@ -966,6 +967,136 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 s_logger.warn("Failed to activate SSH port forwarding rules for the container cluster " + containerCluster.getName() + " due to " + e);
                 stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
                 throw new ManagementServerException("Failed to activate SSH port forwarding rules for the cluster: " + containerCluster.getName(), e);
+            }
+        }
+    }
+
+    // Open up  firewall ports 2222 to 2222+n for SSH access. Also create port-forwarding
+    // rule to forward public IP traffic to all node VM private IP. Existing node VMs before scaling
+    // will already be having these rules
+    private void scaleContainerClusterNetworkRules(IPAddressVO publicIp, Account account, long containerClusterId,
+                                              List<Long> clusterVMIds) throws ManagementServerException {
+        ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
+
+        List<String> sourceCidrList = new ArrayList<String>();
+        sourceCidrList.add("0.0.0.0/0");
+        boolean firewallRuleFound = false;
+        int existingFirewallRuleSourcePortEnd = 2222;
+        List<FirewallRuleVO> firewallRules = _firewallDao.listByIpAndPurposeAndNotRevoked(publicIp.getId(), FirewallRule.Purpose.Firewall);
+        for (FirewallRuleVO firewallRule : firewallRules) {
+            if (firewallRule.getSourcePortStart() == 2222) {
+                firewallRuleFound = true;
+                existingFirewallRuleSourcePortEnd = firewallRule.getSourcePortEnd();
+                _firewallService.revokeIngressFwRule(firewallRule.getId(), true);
+                break;
+            }
+        }
+        if (!firewallRuleFound) {
+            throw new ManagementServerException("Firewall rule for node SSH access can't be provisioned!");
+        }
+        try {
+            CreateFirewallRuleCmd rule = new CreateFirewallRuleCmd();
+            rule = ComponentContext.inject(rule);
+
+            Field addressField = rule.getClass().getDeclaredField("ipAddressId");
+            addressField.setAccessible(true);
+            addressField.set(rule, publicIp.getId());
+
+            Field protocolField = rule.getClass().getDeclaredField("protocol");
+            protocolField.setAccessible(true);
+            protocolField.set(rule, "TCP");
+
+            Field startPortField = rule.getClass().getDeclaredField("publicStartPort");
+            startPortField.setAccessible(true);
+            startPortField.set(rule, new Integer(2222));
+
+            Field endPortField = rule.getClass().getDeclaredField("publicEndPort");
+            endPortField.setAccessible(true);
+            endPortField.set(rule, new Integer(2222 + (int)containerCluster.getNodeCount()));
+
+            Field cidrField = rule.getClass().getDeclaredField("cidrlist");
+            cidrField.setAccessible(true);
+            cidrField.set(rule, sourceCidrList);
+
+            _firewallService.createIngressFirewallRule(rule);
+            _firewallService.applyIngressFwRules(publicIp.getId(), account);
+
+            if (s_logger.isDebugEnabled()) {
+                s_logger.debug("Provisioned firewall rule to open up port 2222 on " + publicIp.getAddress() +
+                        " for cluster " + containerCluster.getName());
+            }
+        } catch (RuntimeException rte) {
+            s_logger.warn("Failed to provision firewall rules for the container cluster: " + containerCluster.getName()
+                    + " due to exception: " + getStackTrace(rte));
+            throw new ManagementServerException("Failed to provision firewall rules for the container " +
+                    "cluster: " + containerCluster.getName(), rte);
+        } catch (Exception e) {
+            s_logger.warn("Failed to provision firewall rules for the container cluster: " + containerCluster.getName()
+                    + " due to exception: " + getStackTrace(e));
+            throw new ManagementServerException("Failed to provision firewall rules for the container " +
+                    "cluster: " + containerCluster.getName());
+        }
+
+        if (clusterVMIds != null && !clusterVMIds.isEmpty()) { // Upscaling, add new port-forwarding rules
+            // handle Nic interface method change between releases 4.5 and 4.6 and above through reflection
+            Method m = null;
+            try {
+                m = Nic.class.getMethod("getIp4Address");
+            } catch (NoSuchMethodException e1) {
+                try {
+                    m = Nic.class.getMethod("getIPv4Address");
+                } catch (NoSuchMethodException e2) {
+                    throw new ManagementServerException("Failed to activate port forwarding rules for the cluster: " + containerCluster.getName());
+                }
+            }
+
+            // Apply port forwarding only to new VMs
+            final long publicIpId = publicIp.getId();
+            final long networkId = containerCluster.getNetworkId();
+            final long accountId = account.getId();
+            final long domainId = account.getDomainId();
+            for (int i = 0; i < clusterVMIds.size(); ++i) {
+                long vmId = clusterVMIds.get(i);
+                Nic vmNic = _networkModel.getNicInNetwork(vmId, containerCluster.getNetworkId());
+                Ip vmIp = null;
+                try {
+                    vmIp = new Ip(m.invoke(vmNic).toString());
+                } catch (InvocationTargetException | IllegalAccessException ie) {
+                    throw new ManagementServerException("Failed to activate SSH port forwarding rules for the cluster: " + containerCluster.getName());
+                }
+                final Ip vmIpFinal = vmIp;
+                final long vmIdFinal = vmId;
+                final int srcPortFinal = existingFirewallRuleSourcePortEnd + 1 + i;
+
+                try {
+                    PortForwardingRuleVO pfRule = Transaction.execute(new TransactionCallbackWithException<PortForwardingRuleVO, NetworkRuleConflictException>() {
+                        @Override
+                        public PortForwardingRuleVO doInTransaction(TransactionStatus status) throws NetworkRuleConflictException {
+                            PortForwardingRuleVO newRule =
+                                    new PortForwardingRuleVO(null, publicIpId,
+                                            srcPortFinal, srcPortFinal,
+                                            vmIpFinal,
+                                            22, 22,
+                                            "tcp", networkId, accountId, domainId, vmIdFinal);
+                            newRule.setDisplay(true);
+                            newRule.setState(FirewallRule.State.Add);
+                            newRule = _portForwardingDao.persist(newRule);
+                            return newRule;
+                        }
+                    });
+                    _rulesService.applyPortForwardingRules(publicIp.getId(), account);
+
+                    if (s_logger.isDebugEnabled()) {
+                        s_logger.debug("Provisioning SSH port forwarding rule from port 2222 to 22 on " + publicIp.getAddress() +
+                                " to the VM IP :" + vmIpFinal + " in container cluster " + containerCluster.getName());
+                    }
+                } catch (RuntimeException rte) {
+                    s_logger.warn("Failed to activate SSH port forwarding rules for the container cluster " + containerCluster.getName() + " due to " + rte);
+                    throw new ManagementServerException("Failed to activate SSH port forwarding rules for the cluster: " + containerCluster.getName(), rte);
+                } catch (Exception e) {
+                    s_logger.warn("Failed to activate SSH port forwarding rules for the container cluster " + containerCluster.getName() + " due to " + e);
+                    throw new ManagementServerException("Failed to activate SSH port forwarding rules for the cluster: " + containerCluster.getName(), e);
+                }
             }
         }
     }
@@ -1128,6 +1259,10 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 cpu_requested * clusterSize, ram_requested * clusterSize);
         s_logger.warn(msg);
         throw new InsufficientServerCapacityException(msg, DataCenter.class, dcId);
+    }
+
+    public DeployDestination plan(final ContainerCluster containerCluster) throws InsufficientServerCapacityException {
+        return plan(containerCluster.getId(), containerCluster.getZoneId());
     }
 
     public DeployDestination plan(final long containerClusterId, final long dcId) throws InsufficientServerCapacityException {
@@ -1641,6 +1776,266 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     }
 
     @Override
+    public boolean scaleContainerCluster(ScaleContainerClusterCmd cmd) throws ManagementServerException, ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
+        final long containerClusterId = cmd.getId();
+        final long clusterSize = cmd.getClusterSize();
+        ContainerClusterVO containerCluster = _containerClusterDao.findById(containerClusterId);
+        if (containerCluster == null) {
+            throw new InvalidParameterValueException("Failed to find container cluster id: " + containerClusterId);
+        }
+
+        if (clusterSize < 1) {
+            throw new InvalidParameterValueException(String.format("Container cluster id: %s cannot be scaled for size, %d",containerCluster.getUuid(), clusterSize));
+        }
+
+        if (containerCluster.getRemoved() != null) {
+            throw new ManagementServerException("Container cluster id:" + containerCluster.getUuid() + " is already deleted.");
+        }
+
+        if (clusterSize == containerCluster.getNodeCount()) {
+            throw new InvalidParameterValueException(String.format("Container cluster id: %s is already running %d nodes",containerCluster.getUuid(), clusterSize));
+        }
+
+        if (!(containerCluster.getState().equals(ContainerCluster.State.Created) ||
+                containerCluster.getState().equals(ContainerCluster.State.Running))) { // Cannot scale stopped cluster currently
+            throw new PermissionDeniedException(String.format("Container cluster id: %s is in %s state", containerCluster.getUuid(), containerCluster.getState().toString()));
+        }
+
+        if (s_logger.isDebugEnabled()) {
+            s_logger.debug("Scaling container cluster: " + containerCluster.getName());
+        }
+
+        // Check capacity and transition state
+        final long originalNodeCount = containerCluster.getNodeCount();
+        final long newVmRequiredCount = clusterSize - originalNodeCount;
+        final ContainerCluster.State clusterState = containerCluster.getState();
+        if (newVmRequiredCount > 0) {
+            stateTransitTo(containerClusterId, ContainerCluster.Event.ScaleUpRequested);
+            try {
+                if (clusterState.equals(ContainerCluster.State.Running)) {
+                    plan(newVmRequiredCount, containerCluster.getZoneId(), _srvOfferingDao.findById(containerCluster.getServiceOfferingId()));
+                } else {
+                    plan(containerCluster.getNodeCount()+newVmRequiredCount, containerCluster.getZoneId(), _srvOfferingDao.findById(containerCluster.getServiceOfferingId()));
+                }
+            } catch (InsufficientCapacityException e) {
+                stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                s_logger.warn("Scaling the cluster failed due to insufficient capacity in the container cluster: " + containerCluster.getName() + " due to " + e);
+                throw new ServerApiException(ApiErrorCode.INSUFFICIENT_CAPACITY_ERROR, "Provisioning the cluster failed due to insufficient capacity in the container cluster: " + containerCluster.getName(), e);
+            }
+        } else {
+            stateTransitTo(containerClusterId, ContainerCluster.Event.ScaleUpRequested);
+        }
+
+        // Update ContainerClusterVO
+        final ServiceOffering serviceOffering = _srvOfferingDao.findById(containerCluster.getServiceOfferingId());
+        if (serviceOffering == null) {
+            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, service offering for the container cluster not found!", containerCluster.getUuid()));
+        }
+        final long cores = serviceOffering.getCpu() * clusterSize;
+        final long memory = serviceOffering.getRamSize() * clusterSize;
+
+        containerCluster = Transaction.execute(new TransactionCallback<ContainerClusterVO>() {
+            @Override
+            public ContainerClusterVO doInTransaction(TransactionStatus status) {
+                ContainerClusterVO updatedCluster = _containerClusterDao.createForUpdate(containerClusterId);
+                updatedCluster.setNodeCount(clusterSize);
+                updatedCluster.setCores(cores);
+                updatedCluster.setMemory(memory);
+                _containerClusterDao.persist(updatedCluster);
+                return updatedCluster;
+            }
+        });
+        if (containerCluster == null) {
+            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, unable to update container cluster!", containerCluster.getUuid()));
+        }
+        containerCluster = _containerClusterDao.findById(containerClusterId);
+
+        // Perform scaling
+        if (clusterState.equals(ContainerCluster.State.Running)) {
+            List<ContainerClusterVmMapVO> vmList = _containerClusterVmMapDao.listByClusterId(containerCluster.getId());
+            if (vmList == null || vmList.isEmpty() || vmList.size()-1 < originalNodeCount) {
+                stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, it is in unstable state as not enough existing VM instances found!", containerCluster.getUuid()));
+            }
+            IPAddressVO publicIp = null;
+            List<IPAddressVO> ips = _publicIpAddressDao.listByAssociatedNetwork(containerCluster.getNetworkId(), true);
+            if (ips == null || ips.isEmpty() || ips.get(0) == null) {
+                s_logger.warn("Network:" + containerCluster.getNetworkId() + " for the container cluster name:" + containerCluster.getName() + " does not have " +
+                        "public IP's associated with it. So aborting container cluster scaling.");
+                throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, unable to connect the network!", containerCluster.getUuid()));
+            }
+            publicIp = ips.get(0);
+            Boolean devel = Boolean.valueOf(_globalConfigDao.getValue("developer"));
+            String keyFile = String.format("%s/.ssh/id_rsa", System.getProperty("user.home"));
+            if (devel) {
+                keyFile += ".cloud";
+            }
+            File pkFile = new File(keyFile);
+            Account account = _accountDao.findById(containerCluster.getAccountId());
+            if (newVmRequiredCount < 0) { // downscale
+                int i = vmList.size() - 1;
+                while (i > 1 && vmList.size() > clusterSize + 1) { // Reverse order as first VM will be k8s master
+                    ContainerClusterVmMapVO vmMapVO = vmList.get(i);
+                    UserVmVO userVM = _userVmDao.findById(vmMapVO.getVmId());
+
+                    // Gracefully remove-delete k8s node
+                    try {
+                        Pair<Boolean, String> result = SshHelper.sshExecute(publicIp.getAddress().addr(), 2222, "core",
+                                pkFile, null, String.format("sudo kubectl drain %s --ignore-daemonsets --delete-local-data", userVM.getHostName()),
+                                10000, 10000, 30000);
+                        if (!result.first()) {
+                            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Draining kubernetes node unsuccessful");
+                        }
+                        result = SshHelper.sshExecute(publicIp.getAddress().addr(), 2222, "core",
+                                pkFile, null, String.format("sudo kubectl delete node %s", userVM.getHostName()),
+                                10000, 10000, 30000);
+                        if (!result.first()) {
+                            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Deleting kubernetes node unsuccessful");
+                        }
+                    } catch (Exception e) {
+                        s_logger.warn("Failed to remove kubernetes node while scaling container cluster with ID " + containerCluster.getUuid() + ": " + e);
+                        stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                        throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, unable to remove kubernetes node!" + e, containerCluster.getUuid()));
+                    }
+
+                    // Remove port-forwarding network rules
+                    List<PortForwardingRuleVO> pfRules = _portForwardingDao.listByNetwork(containerCluster.getNetworkId());
+                    for (PortForwardingRuleVO pfRule : pfRules) {
+                        if (pfRule.getVirtualMachineId() == userVM.getId()) {
+                            _portForwardingDao.remove(pfRule.getId());
+                            break;
+                        }
+                    }
+                    _rulesService.applyPortForwardingRules(publicIp.getId(), account);
+
+                    // Expunge VM
+                    UserVm vm = _userVmService.destroyVm(userVM.getId(), true);
+                    if (!VirtualMachine.State.Expunging.equals(vm.getState())) {
+                        stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                        throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, VM '%s' is now in state '%s'."
+                                , containerCluster.getUuid()
+                                , vm.getInstanceName()
+                                , vm.getState().toString()));
+                    }
+                    vm = _userVmService.expungeVm(userVM.getId());
+                    if (!VirtualMachine.State.Expunging.equals(vm.getState())) {
+                        throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, VM '%s' is now in state '%s'."
+                                , containerCluster.getUuid()
+                                , vm.getInstanceName()
+                                , vm.getState().toString()));
+                    }
+
+                    // Expunge cluster VMMapVO
+                    _containerClusterVmMapDao.expunge(vmMapVO.getId());
+
+                    i--;
+                }
+
+                // Scale network rules to update firewall rule
+                try {
+                    scaleContainerClusterNetworkRules(publicIp, account, containerClusterId, null);
+                } catch (Exception e) {
+                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                    throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, unable to update network rules!", containerCluster.getUuid()), e);
+                }
+            } else { // upscale, same node count handled above
+                UserVmVO masterVm = _userVmDao.findById(vmList.get(0).getVmId());
+                String masterIP = masterVm.getPrivateIpAddress();
+                List<Long> clusterVMIds = new ArrayList<>();
+
+                // Create new node VMs
+                for (int i = (int) originalNodeCount+1; i <= clusterSize; i++) {
+                    UserVm vm = null;
+                    try {
+                        vm = createK8SNode(containerCluster, masterIP, i);
+                        final long nodeVmId = vm.getId();
+                        ContainerClusterVmMapVO clusterNodeVmMap = Transaction.execute(new TransactionCallback<ContainerClusterVmMapVO>() {
+                            @Override
+                            public ContainerClusterVmMapVO doInTransaction(TransactionStatus status) {
+                                ContainerClusterVmMapVO newClusterVmMap = new ContainerClusterVmMapVO(containerClusterId, nodeVmId);
+                                _clusterVmMapDao.persist(newClusterVmMap);
+                                return newClusterVmMap;
+                            }
+                        });
+                        startK8SVM(vm, containerCluster);
+                        clusterVMIds.add(vm.getId());
+
+                        vm = _vmDao.findById(vm.getId());
+                        if (s_logger.isDebugEnabled()) {
+                            s_logger.debug("Provisioned a node VM in to the container cluster: " + containerCluster.getName());
+                        }
+                    } catch (RuntimeException e) {
+                        stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                        throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, provisioning the node VM failed in the container cluster!", containerCluster.getUuid()), e);
+                    } catch (Exception e) {
+                        stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                        throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, provisioning the node VM failed in the container cluster!", containerCluster.getUuid()), e);
+                    }
+                }
+
+                // Scale network rules to update firewall rule and add port-forwarding rules
+                try {
+                    scaleContainerClusterNetworkRules(publicIp, account, containerClusterId, clusterVMIds);
+                } catch (Exception e) {
+                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                    throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, unable to update network rules!", containerCluster.getUuid()), e);
+                }
+
+                // Attach binaries ISO to new VMs
+                attachIsoK8SVMs(containerClusterId, clusterVMIds);
+
+                // Check if new nodes are added in k8s cluster
+                int retryCounter = 0;
+                int maxRetries = 12;
+                while (retryCounter < maxRetries) {
+                    try {
+                        Pair<Boolean, String> result = SshHelper.sshExecute(publicIp.getAddress().addr(), 2222, "core",
+                                pkFile, null, "sudo kubectl get nodes | grep \"Ready\" | wc -l",
+                                20000, 10000, 30000);
+                        if (result.first()) {
+                            int nodesCount = 0;
+                            try {
+                                nodesCount = Integer.parseInt(result.second().trim());
+                            } catch (Exception e) {}
+                            if (nodesCount == containerCluster.getNodeCount()+1) {
+                                if (s_logger.isDebugEnabled()) {
+                                    s_logger.debug("All nodes container cluster: " + containerCluster.getName() + " are ready now, scaling successful!");
+                                }
+                                break;
+                            }
+                        }
+                    } catch (Exception e) {
+                        if (s_logger.isDebugEnabled()) {
+                            s_logger.debug("Waiting for container cluster: " + containerCluster.getName() + " API endpoint to be available. retry: " + retryCounter + "/" + maxRetries);
+                        }
+                    }
+                    try {
+                        Thread.sleep(15000);
+                    } catch (InterruptedException ex) {
+                    }
+                    retryCounter++;
+                }
+
+                // Detach binaries ISO from new VMs
+                detachIsoK8SVMs(containerClusterId, clusterVMIds);
+
+                // Throw exception if nodes count for k8s cluster timed out
+                if (retryCounter >= maxRetries) { // Scaling failed
+                    if (s_logger.isDebugEnabled()) {
+                        s_logger.debug("Scaling unsuccessful for container cluster: " + containerCluster.getName() + ". Container cluster does not have desired number of nodes in ready state.");
+                    }
+                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                    throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, unable to have desired number of nodes in ready state!", containerCluster.getUuid()));
+                }
+            }
+        }
+        stateTransitTo(containerClusterId, ContainerCluster.Event.OperationSucceeded);
+        return true;
+    }
+
+    @Override
     public ListResponse<ContainerClusterResponse> listContainerClusters(ListContainerClusterCmd cmd) {
 
         CallContext ctx = CallContext.current();
@@ -1888,6 +2283,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         cmdList.add(DeleteContainerClusterCmd.class);
         cmdList.add(ListContainerClusterCmd.class);
         cmdList.add(GetContainerClusterConfigCmd.class);
+        cmdList.add(ScaleContainerClusterCmd.class);
         return cmdList;
     }
 

@@ -521,12 +521,11 @@
                                         poll: pollAsyncJobResult
                                     }
                                 },
-                                downloadKubeConfig: {
-                                    label: 'Download Cluster Config',
-                                    compactLabel: 'label.configuration',
+                                downloadContainerClusterKubeConfig: {
+                                    label: 'Download Container Cluster Config',
                                     messages: {
                                         notification: function(args) {
-                                            return 'Download cluster config';
+                                            return 'Download Container Cluster Config';
                                         }
                                     },
                                     action: function(args) {
@@ -548,6 +547,53 @@
                                             }
                                         });
                                         downloadClusterKubeConfig();
+                                    }
+                                },
+                                scaleContainerCluster: {
+                                    label: 'Scale Container Cluster',
+                                    messages: {
+                                        notification: function(args) {
+                                            return 'Scale Container Cluster';
+                                        }
+                                    },
+                                    createForm: {
+                                        title: 'Scale Container Cluster',
+                                        desc: '',
+                                        fields: {
+                                            size: {
+                                                label: 'Cluster size',
+                                                //docID: 'helpContainerClusterSize',
+                                                validation: {
+                                                    required: true,
+                                                    number: true
+                                                },
+                                            }
+                                        }
+                                    },
+                                    action: function(args) {
+                                        var data = {
+                                            id: args.context.containerclusters[0].id,
+                                            size: args.data.size
+                                        };
+                                        $.ajax({
+                                            url: createURL('scaleContainerCluster'),
+                                            data: data,
+                                            dataType: "json",
+                                            success: function (json) {
+                                                var jid = json.scalecontainerclusterresponse.jobid;
+                                                args.response.success({
+                                                    _custom: {
+                                                        jobId: jid,
+                                                        getActionFilter: function() {
+                                                            return ccsActionfilter;
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        }); //end ajax
+                                    },
+                                    notification: {
+                                        poll: pollAsyncJobResult
                                     }
                                 }
                             },
@@ -802,8 +848,11 @@
             if (jsonObj.state == "Stopped") {
                 allowedActions.push("start");
             } else {
-                allowedActions.push("downloadKubeConfig");
+                allowedActions.push("downloadContainerClusterKubeConfig");
                 allowedActions.push("stop");
+            }
+            if (jsonObj.state == "Created" || jsonObj.state == "Running") {
+                allowedActions.push("scaleContainerCluster");
             }
             allowedActions.push("destroy");
         }

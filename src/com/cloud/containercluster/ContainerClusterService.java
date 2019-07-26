@@ -18,6 +18,7 @@ package com.cloud.containercluster;
 
 import org.apache.cloudstack.api.command.user.containercluster.GetContainerClusterConfigCmd;
 import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
+import org.apache.cloudstack.api.command.user.containercluster.ScaleContainerClusterCmd;
 import org.apache.cloudstack.api.response.ContainerClusterConfigResponse;
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.cloudstack.api.response.ListResponse;
@@ -55,10 +56,13 @@ public interface ContainerClusterService extends PluggableService {
 
     boolean deleteContainerCluster(Long containerClusterId) throws ManagementServerException;
 
-    ListResponse<ContainerClusterResponse>  listContainerClusters(ListContainerClusterCmd cmd);
+    ListResponse<ContainerClusterResponse> listContainerClusters(ListContainerClusterCmd cmd);
 
-    ContainerClusterConfigResponse  getContainerClusterConfig(GetContainerClusterConfigCmd cmd);
+    ContainerClusterConfigResponse getContainerClusterConfig(GetContainerClusterConfigCmd cmd);
 
     ContainerClusterResponse createContainerClusterResponse(long containerClusterId);
+
+    boolean scaleContainerCluster(ScaleContainerClusterCmd cmd) throws ManagementServerException,
+            ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException;
 
 }

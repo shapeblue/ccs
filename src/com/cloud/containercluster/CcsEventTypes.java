@@ -20,4 +20,5 @@ public class CcsEventTypes {
     public static final String EVENT_CONTAINER_CLUSTER_DELETE = "CONTAINER.CLUSTER.DELETE";
     public static final String EVENT_CONTAINER_CLUSTER_START = "CONTAINER.CLUSTER.START";
     public static final String EVENT_CONTAINER_CLUSTER_STOP = "CONTAINER.CLUSTER.STOP";
+    public static final String EVENT_CONTAINER_CLUSTER_SCALE = "CONTAINER.CLUSTER.SCALE";
 }

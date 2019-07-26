@@ -57,7 +57,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-    <acs.version>4.11.3.0-SNAPSHOT</acs.version>
+    <acs.version>4.11.4.0-SNAPSHOT</acs.version>
 
     <cs.jpa.version>2.2.0</cs.jpa.version>
     <cs.gson.version>1.7.2</cs.gson.version>

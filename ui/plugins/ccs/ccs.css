@@ -13,3 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+.downloadContainerClusterKubeConfig .icon {
+  background-position: -35px -125px;
+}
+
+.downloadContainerClusterKubeConfig:hover .icon {
+  background-position: -35px -707px;
+}
+
+.scaleContainerCluster .icon {
+  background-position: -264px -2px;
+}
+
+.scaleContainerCluster:hover .icon {
+  background-position: -263px -583px;
+}
+
