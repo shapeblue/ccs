@@ -1426,12 +1426,12 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                                 , vm.getInstanceName()
                                 , vm.getUuid()
                                 , vm.getState().toString()));
-                        vm = _userVmService.expungeVm(vmID);
-                        if (!VirtualMachine.State.Expunging.equals(vm.getState())) {
-                            s_logger.error(String.format("VM '%s' is now in state '%s'. I will probably fail at deleting it's cluster."
-                                    , vm.getInstanceName()
-                                    , vm.getState().toString()));
-                        }
+                    }
+                    vm = _userVmService.expungeVm(vmID);
+                    if (!VirtualMachine.State.Expunging.equals(vm.getState())) {
+                        s_logger.error(String.format("VM '%s' is now in state '%s'. I will probably fail at deleting it's cluster."
+                                , vm.getInstanceName()
+                                , vm.getState().toString()));
                     }
                     _containerClusterVmMapDao.expunge(clusterVM.getId());
                     if (s_logger.isDebugEnabled()) {
@@ -1451,6 +1451,27 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         // if there are VM's that were not expunged, we can not delete the network
         if (!failedVmDestroy) {
             if (cleanupNetwork) {
+                if(clusterVMs!=null  && !clusterVMs.isEmpty()) { // Wait for few seconds to get all VMs really expunged
+                    final int maxRetries = 3;
+                    int retryCounter = 0;
+                    while (retryCounter < maxRetries) {
+                        boolean allVMsRemoved = true;
+                        for (ContainerClusterVmMap clusterVM : clusterVMs) {
+                            UserVmVO userVM = _vmDao.findById(clusterVM.getVmId());
+                            if (userVM != null && !userVM.isRemoved()) {
+                                allVMsRemoved = false;
+                                break;
+                            }
+                        }
+                        if (allVMsRemoved) {
+                            break;
+                        }
+                        try {
+                            Thread.sleep(10000);
+                        } catch (InterruptedException ie) {}
+                        retryCounter++;
+                    }
+                }
                 NetworkVO network = null;
                 try {
                     network = _networkDao.findById(cluster.getNetworkId());
