@@ -424,11 +424,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     // perform a cold start (which will provision resources as well)
     private boolean startContainerClusterOnCreate(final long containerClusterId) throws ManagementServerException {
 
-        // Starting a contriner cluster has below workflow
-        //   - start the newtwork
+        // Starting a container cluster has below workflow
+        //   - start the network
         //   - provision the master /node VM
-        //   - priovision node VM's (as many as cluster size)
-        //   - update the booke keeping data of the VM's provisioned for the cluster
+        //   - provision node VM's (as many as cluster size)
+        //   - update the book keeping data of the VM's provisioned for the cluster
         //   - setup networking (add Firewall and PF rules)
         //   - wait till kubernetes API server on master VM to come up
         //   - wait till addon services (dashboard etc) to come up
@@ -473,7 +473,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         List<IPAddressVO> ips = _publicIpAddressDao.listByAssociatedNetwork(containerCluster.getNetworkId(), true);
         if (ips == null || ips.isEmpty()) {
             s_logger.warn("Network:" + containerCluster.getNetworkId() + " for the container cluster name:" + containerCluster.getName() + " does not have " +
-                    "public IP's assocated with it. So aborting container cluster strat.");
+                    "public IP's associated with it. So aborting container cluster start.");
             throw new ManagementServerException("Failed to start the network while creating container cluster name:" + containerCluster.getName());
         }
         publicIp = ips.get(0);
@@ -513,8 +513,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         String masterIP = k8sMasterVM.getPrivateIpAddress();
 
-        long anyNodeVmId = 0;
-        UserVm k8anyNodeVM = null;
         for (int i = 1; i <= containerCluster.getNodeCount(); i++) {
             UserVm vm = null;
             try {
@@ -543,11 +541,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 stateTransitTo(containerClusterId, ContainerCluster.Event.CreateFailed);
                 s_logger.warn("Provisioning the node VM failed in the container cluster " + containerCluster.getName() + " due to " + e);
                 throw new ManagementServerException("Provisioning the node VM failed in the container cluster " + containerCluster.getName(), e);
-            }
-
-            if (anyNodeVmId == 0) {
-                anyNodeVmId = vm.getId();
-                k8anyNodeVM = vm;
             }
         }
 
@@ -764,8 +757,10 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return true;
     }
 
-    // Open up  firewall port 6443, secure port on which kubernetes API server is running. Also create portforwarding
+    // Open up  firewall port 6443, secure port on which kubernetes API server is running. Also create port-forwarding
     // rule to forward public IP traffic to master VM private IP
+    // Open up  firewall ports 2222 to 2222+n for SSH access. Also create port-forwarding
+    // rule to forward public IP traffic to all node VM private IP
     private void setupContainerClusterNetworkRules(IPAddressVO publicIp, Account account, long containerClusterId,
                                                    List<Long> clusterVMIds) throws ManagementServerException {
 
@@ -1524,14 +1519,14 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return true;
     }
 
-    void processFailedNetworkDelete(long containerClusterId) {
+    private void processFailedNetworkDelete(long containerClusterId) {
         stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
         ContainerClusterVO cluster = _containerClusterDao.findById(containerClusterId);
         cluster.setCheckForGc(true);
         _containerClusterDao.update(cluster.getId(), cluster);
     }
 
-    UserVm createK8SMaster(final ContainerClusterVO containerCluster, final List<IPAddressVO> ips) throws ManagementServerException,
+    private UserVm createK8SMaster(final ContainerClusterVO containerCluster, final List<IPAddressVO> ips) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
 
         UserVm masterVm = null;
@@ -1619,7 +1614,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         return masterVm;
     }
 
-    UserVm createK8SNode(ContainerClusterVO containerCluster, String masterIp, int nodeInstance) throws ManagementServerException,
+    private UserVm createK8SNode(ContainerClusterVO containerCluster, String masterIp, int nodeInstance) throws ManagementServerException,
             ResourceAllocationException, ResourceUnavailableException, InsufficientCapacityException {
 
         UserVm nodeVm = null;
@@ -2072,7 +2067,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             if (!ContainerCluster.State.Running.toString().equals(state) &&
                     !ContainerCluster.State.Stopped.toString().equals(state) &&
                     !ContainerCluster.State.Destroyed.toString().equals(state)) {
-                throw new InvalidParameterValueException("Invalid vlaue for cluster state is specified");
+                throw new InvalidParameterValueException("Invalid value for cluster state is specified");
             }
         }
 
