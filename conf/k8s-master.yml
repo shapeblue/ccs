@@ -137,6 +137,7 @@ write-files:
         if [ $? -eq 0 ]; then
           break;
         fi
+        crucial_cmd_attempts=$[$crucial_cmd_attempts + 1]
       done
       crucial_cmd_attempts=1
       while true; do
@@ -145,11 +146,12 @@ write-files:
           break
         fi
         set +e
-        kubeadm init --pod-network-cidr=10.244.0.0/16 --token {{ k8s_master.cluster.token }} {{ k8s_master.cluster.ip }}
+        kubeadm1 init --pod-network-cidr=10.244.0.0/16 --token {{ k8s_master.cluster.token }} {{ k8s_master.cluster.ip }}
         set -e
         if [ $? -eq 0 ]; then
           break;
         fi
+        crucial_cmd_attempts=$[$crucial_cmd_attempts + 1]
       done
 
   - path: /opt/bin/deploy-kube-system

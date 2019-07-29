@@ -114,6 +114,7 @@ write-files:
         if [ $? -eq 0 ]; then
           break;
         fi
+        crucial_cmd_attempts=$[$crucial_cmd_attempts + 1]
       done
 
   - path: /opt/bin/deploy-kube-system
