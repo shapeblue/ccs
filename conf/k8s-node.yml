@@ -100,8 +100,21 @@ write-files:
 
       systemctl enable kubelet && systemctl start kubelet
       modprobe br_netfilter && sysctl net.bridge.bridge-nf-call-iptables=1
-      
-      kubeadm config images pull
+
+      MAX_SETUP_CRUCIAL_CMD_ATTEMPTS=3
+      crucial_cmd_attempts=1
+      while true; do
+        if (( "$crucial_cmd_attempts" > "$MAX_SETUP_CRUCIAL_CMD_ATTEMPTS" )); then
+          echo "Error: kubeadm pull images failed!"
+          break
+        fi
+        set +e
+        kubeadm config images pull
+        set -e
+        if [ $? -eq 0 ]; then
+          break;
+        fi
+      done
 
   - path: /opt/bin/deploy-kube-system
     permissions: 0700
