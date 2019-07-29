@@ -146,7 +146,7 @@ write-files:
           break
         fi
         set +e
-        kubeadm1 init --pod-network-cidr=10.244.0.0/16 --token {{ k8s_master.cluster.token }} {{ k8s_master.cluster.ip }}
+        kubeadm init --pod-network-cidr=10.244.0.0/16 --token {{ k8s_master.cluster.token }} {{ k8s_master.cluster.ip }}
         set -e
         if [ $? -eq 0 ]; then
           break;
