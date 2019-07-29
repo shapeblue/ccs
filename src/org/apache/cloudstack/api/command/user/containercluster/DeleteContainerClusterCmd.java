@@ -15,14 +15,8 @@
  */
 package org.apache.cloudstack.api.command.user.containercluster;
 
-import com.cloud.containercluster.CcsEventTypes;
-import com.cloud.containercluster.ContainerCluster;
-import com.cloud.containercluster.ContainerClusterService;
-import com.cloud.exception.ConcurrentOperationException;
-import com.cloud.exception.InsufficientCapacityException;
-import com.cloud.exception.NetworkRuleConflictException;
-import com.cloud.exception.ResourceAllocationException;
-import com.cloud.exception.ResourceUnavailableException;
+import javax.inject.Inject;
+
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
@@ -35,7 +29,14 @@ import org.apache.cloudstack.api.response.SuccessResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.log4j.Logger;
 
-import javax.inject.Inject;
+import com.cloud.containercluster.CcsEventTypes;
+import com.cloud.containercluster.ContainerCluster;
+import com.cloud.containercluster.ContainerClusterService;
+import com.cloud.exception.ConcurrentOperationException;
+import com.cloud.exception.InsufficientCapacityException;
+import com.cloud.exception.NetworkRuleConflictException;
+import com.cloud.exception.ResourceAllocationException;
+import com.cloud.exception.ResourceUnavailableException;
 
 @APICommand(name = "deleteContainerCluster",
         description = "deletes a container cluster",
@@ -73,19 +74,31 @@ public class DeleteContainerClusterCmd extends BaseAsyncCmd {
     /////////////////////////////////////////////////////
     /////////////// API Implementation///////////////////
     /////////////////////////////////////////////////////
+    public ContainerCluster validateRequest() {
+        if (getId() == null || getId() < 1L) {
+            throw new ServerApiException(ApiErrorCode.PARAM_ERROR, "Invalid container cluster ID provided");
+        }
+        final ContainerCluster containerCluster = _containerClusterService.findById(getId());
+        if (containerCluster == null) {
+            throw new ServerApiException(ApiErrorCode.PARAM_ERROR, "Given container cluster was not found");
+        }
+        return containerCluster;
+    }
 
 
     @Override
     public void execute() throws ResourceUnavailableException, InsufficientCapacityException,
             ServerApiException, ConcurrentOperationException, ResourceAllocationException,
             NetworkRuleConflictException {
+        final ContainerCluster containerCluster = validateRequest();
         try {
             _containerClusterService.deleteContainerCluster(id);
             SuccessResponse response = new SuccessResponse(getCommandName());
             setResponseObject(response);
         } catch (Exception e) {
+
             s_logger.warn("Failed to delete vm container cluster due to " + e);
-            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Failed to delete vm container cluster", e);
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Failed to delete container cluster ID: %s. %s", containerCluster.getUuid(), e.getMessage()), e);
         }
     }
 

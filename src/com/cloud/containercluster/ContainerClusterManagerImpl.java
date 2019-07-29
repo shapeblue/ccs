@@ -1397,7 +1397,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             if (s_logger.isDebugEnabled()) {
                 s_logger.debug("Cannot perform delete operation on cluster:" + cluster.getName() + " in state " + cluster.getState());
             }
-            throw new PermissionDeniedException("Cannot perform delete operation on cluster: " + cluster.getName() + " in state" + cluster.getState());
+            throw new PermissionDeniedException("Cannot perform delete operation on cluster: " + cluster.getName() + " in state " + cluster.getState());
         }
 
         stateTransitTo(containerClusterId, ContainerCluster.Event.DestroyRequested);
