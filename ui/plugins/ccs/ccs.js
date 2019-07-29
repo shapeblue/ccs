@@ -547,6 +547,12 @@
                                             }
                                         });
                                         downloadClusterKubeConfig();
+                                        args.response.success({});
+                                    },
+                                    notification: {
+                                        poll: function(args) {
+                                            args.complete();
+                                        }
                                     }
                                 },
                                 scaleContainerCluster: {
@@ -702,7 +708,7 @@
                                                         }
                                                     }
                                                 });
-                                                return jQuery('<br><p>').html("Access container cluster<br>Download Config File<br><br>How to do this<br><code>kubectl --kubeconfig /custom/path/kube.config get pods</code>");
+                                                return jQuery('<br><p>').html("Access container cluster<br>Download Config File<br><br>Use kubectl<br><code>kubectl --kubeconfig /custom/path/kube.config {COMMAND}</code><br><br>List pods<br><code>kubectl --kubeconfig /custom/path/kube.config get pods --all-namespaces</code><br>Access dashboard web UI<br>Run proxy locally<br><code>kubectl --kubeconfig /custom/path/kube.config proxy</code><br>Open URL in browser<br><code>http://localhost:8001/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/</code>");
                                                 // return jQuery('<br><p>').html("Access container cluster<br>Download Config File<br><br>How to do this<br><code>kubectl --kubeconfig /custom/path/kube.config get pods</code>");
                                             }
 
