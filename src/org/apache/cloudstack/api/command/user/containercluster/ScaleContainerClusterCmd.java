@@ -41,7 +41,7 @@ import com.cloud.exception.NetworkRuleConflictException;
 import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
 
-@APICommand(name = ScaleContainerClusterCmd.APINAME, description = "Scales a running or stopped container cluster",
+@APICommand(name = ScaleContainerClusterCmd.APINAME, description = "Scales a created or running container cluster",
         responseObject = ContainerClusterResponse.class,
         responseView = ResponseObject.ResponseView.Restricted,
         entityType = {ContainerCluster.class},
