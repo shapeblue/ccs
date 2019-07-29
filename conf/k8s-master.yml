@@ -55,10 +55,12 @@ write-files:
         if [ "$output" != "" ]; then
           while read -r line; do
             mkdir "${ISO_MOUNT_DIR}"
+            retval=0
             set +e
             mount -o ro "${line}" "${ISO_MOUNT_DIR}"
+            retval=$?
             set -e
-            if [ $? -eq 0 ]; then
+            if [ $retval -eq 0 ]; then
               if [ -d "$BINARIES_DIR" ]; then
                 break
               else
@@ -129,12 +131,14 @@ write-files:
       while true; do
         if (( "$crucial_cmd_attempts" > "$MAX_SETUP_CRUCIAL_CMD_ATTEMPTS" )); then
           echo "Error: kubeadm pull images failed!"
-          break
+          exit 1
         fi
+        retval=0
         set +e
         kubeadm config images pull
+        retval=$?
         set -e
-        if [ $? -eq 0 ]; then
+        if [ $retval -eq 0 ]; then
           break;
         fi
         crucial_cmd_attempts=$[$crucial_cmd_attempts + 1]
@@ -143,12 +147,14 @@ write-files:
       while true; do
         if (( "$crucial_cmd_attempts" > "$MAX_SETUP_CRUCIAL_CMD_ATTEMPTS" )); then
           echo "Error: kubeadm init failed!"
-          break
+          exit 1
         fi
+        retval=0
         set +e
         kubeadm init --pod-network-cidr=10.244.0.0/16 --token {{ k8s_master.cluster.token }} {{ k8s_master.cluster.ip }}
+        retval=$?
         set -e
-        if [ $? -eq 0 ]; then
+        if [ $retval -eq 0 ]; then
           break;
         fi
         crucial_cmd_attempts=$[$crucial_cmd_attempts + 1]
