@@ -1800,6 +1800,10 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             throw new InvalidParameterValueException("Failed to find container cluster id: " + containerClusterId);
         }
 
+        Account caller = CallContext.current().getCallingAccount();
+
+        _accountMgr.checkAccess(caller, SecurityChecker.AccessType.OperateEntry, false, containerCluster);
+
         if (clusterSize < 1) {
             throw new InvalidParameterValueException(String.format("Container cluster id: %s cannot be scaled for size, %d",containerCluster.getUuid(), clusterSize));
         }
