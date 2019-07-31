@@ -565,7 +565,44 @@
                                     createForm: {
                                         title: 'Scale Container Cluster',
                                         desc: '',
+                                        preFilter: function(args) {
+                                            var options = args.$form.find('.form-item[rel=serviceoffering]').find('option');
+                                            $.each(options, function(optionIndex, option) {
+                                                if ($(option).val() === args.context.containerclusters[0].serviceofferingid) {
+                                                    $(option).attr('selected','selected');
+                                                }
+                                            });
+                                        },
                                         fields: {
+                                            serviceoffering: {
+                                                label: 'label.menu.service.offerings',
+                                                //docID: 'helpContainerClusterServiceOffering',
+                                                validation: {
+                                                    required: true
+                                                },
+                                                select: function(args) {
+                                                    $.ajax({
+                                                        url: createURL("listServiceOfferings"),
+                                                        dataType: "json",
+                                                        async: true,
+                                                        success: function(json) {
+                                                            var offeringObjs = [];
+                                                            var items = json.listserviceofferingsresponse.serviceoffering;
+                                                            if (items != null) {
+                                                                for (var i = 0; i < items.length; i++) {
+                                                                    offeringObjs.push({
+                                                                        id: items[i].id,
+                                                                        description: items[i].name
+                                                                    });
+                                                                }
+                                                            }
+                                                            args.response.success({
+                                                                data: offeringObjs
+                                                            });
+                                                        }
+                                                    });
+                                                }
+                                            },
                                             size: {
                                                 label: 'Cluster size',
                                                 //docID: 'helpContainerClusterSize',
@@ -579,6 +616,7 @@
                                     action: function(args) {
                                         var data = {
                                             id: args.context.containerclusters[0].id,
+                                            serviceofferingid: args.data.serviceoffering,
                                             size: args.data.size
                                         };
                                         $.ajax({
