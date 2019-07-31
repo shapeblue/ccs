@@ -183,6 +183,10 @@ write-files:
     owner: root:root
     content: |
       #!/bin/bash -e
+      if [[ $(systemctl is-active setup-kube-system) != "inactive" ]]; then
+        echo "setup-kube-system is running!"
+        exit 1
+      fi
       export PATH=$PATH:/opt/bin
       export KUBECONFIG=/etc/kubernetes/admin.conf
 
