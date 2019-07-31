@@ -20,6 +20,8 @@ package org.apache.cloudstack.api.command.user.containercluster;
 import javax.inject.Inject;
 
 import org.apache.cloudstack.acl.RoleType;
+import org.apache.cloudstack.acl.SecurityChecker;
+import org.apache.cloudstack.api.ACL;
 import org.apache.cloudstack.api.APICommand;
 import org.apache.cloudstack.api.ApiConstants;
 import org.apache.cloudstack.api.ApiErrorCode;
@@ -28,6 +30,7 @@ import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ResponseObject;
 import org.apache.cloudstack.api.ServerApiException;
 import org.apache.cloudstack.api.response.ContainerClusterResponse;
+import org.apache.cloudstack.api.response.ServiceOfferingResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.log4j.Logger;
 
@@ -65,8 +68,13 @@ public class ScaleContainerClusterCmd extends BaseAsyncCmd {
             description = "the ID of the container cluster")
     private Long id;
 
+    @ACL(accessType = SecurityChecker.AccessType.UseEntry)
+    @Parameter(name = ApiConstants.SERVICE_OFFERING_ID, type = CommandType.UUID, entityType = ServiceOfferingResponse.class,
+            description = "the ID of the service offering for the virtual machines in the cluster.")
+    private Long serviceOfferingId;
+
     @Parameter(name=ApiConstants.SIZE, type = CommandType.LONG,
-            required = true, description = "number of container cluster nodes")
+            description = "number of container cluster nodes")
     private Long clusterSize;
 
     /////////////////////////////////////////////////////
@@ -75,6 +83,10 @@ public class ScaleContainerClusterCmd extends BaseAsyncCmd {
 
     public Long getId() {
         return id;
+    }
+
+    public Long getServiceOfferingId() {
+        return serviceOfferingId;
     }
 
     public Long getClusterSize() {
