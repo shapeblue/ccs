@@ -1851,7 +1851,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         if (existingServiceOffering == null) {
             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, service offering for the container cluster not found!", containerCluster.getUuid()));
         }
-        if (serviceOffering != null && serviceOffering.getId() != existingServiceOffering.getId()) {
+        final boolean serviceOfferingScalingNeeded = serviceOffering != null && serviceOffering.getId() != existingServiceOffering.getId();
+        final boolean clusterSizeScalingNeeded = clusterSize != null && clusterSize != originalNodeCount;
+        if (serviceOfferingScalingNeeded) {
             List<ContainerClusterVmMapVO> vmList = _containerClusterVmMapDao.listByClusterId(containerCluster.getId());
             if (vmList == null || vmList.isEmpty() || vmList.size() - 1 < originalNodeCount) {
                 stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
@@ -1912,7 +1914,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
         }
 
-        if (clusterSize != null && clusterSize != containerCluster.getNodeCount()) {
+        if (clusterSizeScalingNeeded) {
             // Check capacity and transition state
             final long newVmRequiredCount = clusterSize - originalNodeCount;
             final ServiceOffering containerServiceOffering = _srvOfferingDao.findById(containerCluster.getServiceOfferingId());
@@ -1941,7 +1943,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 }
             }
 
-            if (serviceOffering == null) { // Else already updated
+            if (!serviceOfferingScalingNeeded) { // Else already updated
                 // Update ContainerClusterVO
                 final long cores = containerServiceOffering.getCpu() * clusterSize;
                 final long memory = containerServiceOffering.getRamSize() * clusterSize;
