@@ -1847,7 +1847,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         final ContainerCluster.State clusterState = containerCluster.getState();
         final long originalNodeCount = containerCluster.getNodeCount();
 
-        if (serviceOffering != null) {
+        final ServiceOffering existingServiceOffering = _srvOfferingDao.findById(containerCluster.getServiceOfferingId());
+        if (existingServiceOffering == null) {
+            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, service offering for the container cluster not found!", containerCluster.getUuid()));
+        }
+        if (serviceOffering != null && serviceOffering.getId() != existingServiceOffering.getId()) {
             List<ContainerClusterVmMapVO> vmList = _containerClusterVmMapDao.listByClusterId(containerCluster.getId());
             if (vmList == null || vmList.isEmpty() || vmList.size() - 1 < originalNodeCount) {
                 stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
@@ -1860,10 +1864,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                         throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, scaling container cluster with running VMs on hypervisor %s is not supported!", containerCluster.getUuid(), vmInstance.getHypervisorType()));
                     }
                 }
-            }
-            final ServiceOffering existingServiceOffering = _srvOfferingDao.findById(containerCluster.getServiceOfferingId());
-            if (existingServiceOffering == null) {
-                throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, service offering for the container cluster not found!", containerCluster.getUuid()));
             }
             if (serviceOffering.getRamSize() < existingServiceOffering.getRamSize() ||
                 serviceOffering.getCpu()*serviceOffering.getSpeed() < existingServiceOffering.getCpu()*existingServiceOffering.getSpeed()) {
@@ -1915,8 +1915,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         if (clusterSize != null && clusterSize != containerCluster.getNodeCount()) {
             // Check capacity and transition state
             final long newVmRequiredCount = clusterSize - originalNodeCount;
-            final ServiceOffering existingServiceOffering = _srvOfferingDao.findById(containerCluster.getServiceOfferingId());
-            if (existingServiceOffering == null) {
+            final ServiceOffering containerServiceOffering = _srvOfferingDao.findById(containerCluster.getServiceOfferingId());
+            if (containerServiceOffering == null) {
                 stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
                 throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, service offering for the container cluster not found!", containerCluster.getUuid()));
             }
@@ -1926,9 +1926,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 }
                 try {
                     if (clusterState.equals(ContainerCluster.State.Running)) {
-                        plan(newVmRequiredCount, containerCluster.getZoneId(), existingServiceOffering);
+                        plan(newVmRequiredCount, containerCluster.getZoneId(), containerServiceOffering);
                     } else {
-                        plan(containerCluster.getNodeCount() + newVmRequiredCount, containerCluster.getZoneId(), existingServiceOffering);
+                        plan(containerCluster.getNodeCount() + newVmRequiredCount, containerCluster.getZoneId(), containerServiceOffering);
                     }
                 } catch (InsufficientCapacityException e) {
                     stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
@@ -1943,8 +1943,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
             if (serviceOffering == null) { // Else already updated
                 // Update ContainerClusterVO
-                final long cores = existingServiceOffering.getCpu() * clusterSize;
-                final long memory = existingServiceOffering.getRamSize() * clusterSize;
+                final long cores = containerServiceOffering.getCpu() * clusterSize;
+                final long memory = containerServiceOffering.getRamSize() * clusterSize;
 
                 containerCluster = Transaction.execute(new TransactionCallback<ContainerClusterVO>() {
                     @Override
@@ -2078,9 +2078,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                             if (s_logger.isDebugEnabled()) {
                                 s_logger.debug("Provisioned a node VM in to the container cluster: " + containerCluster.getName());
                             }
-                        } catch (RuntimeException e) {
-                            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
-                            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, provisioning the node VM failed in the container cluster!", containerCluster.getUuid()), e);
                         } catch (Exception e) {
                             stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
                             throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, provisioning the node VM failed in the container cluster!", containerCluster.getUuid()), e);
@@ -2100,11 +2097,11 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
                     // Check if new nodes are added in k8s cluster
                     int retryCounter = 0;
-                    int maxRetries = 12;
+                    int maxRetries = 30*4; // Max wait for 30 mins as online install can take time, same as while creating cluster
                     while (retryCounter < maxRetries) {
                         try {
                             Pair<Boolean, String> result = SshHelper.sshExecute(publicIp.getAddress().addr(), 2222, "core",
-                                    pkFile, null, "sudo kubectl get nodes | grep \"Ready\" | wc -l",
+                                    pkFile, null, "sudo kubectl get nodes -o json | jq \".items[].metadata.name\" | wc -l",
                                     20000, 10000, 30000);
                             if (result.first()) {
                                 int nodesCount = 0;
