@@ -306,6 +306,13 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         ServiceOffering serviceOffering = _srvOfferingDao.findById(serviceOfferingId);
         if (serviceOffering == null) {
             throw new InvalidParameterValueException("No service offering with id:" + serviceOfferingId);
+        } else {
+            if (serviceOffering.isDynamic()) {
+                throw new InvalidParameterValueException(String.format("Custom service offerings are not supported for creating clusters, service offering ID: %s", serviceOffering.getUuid()));
+            }
+            if (serviceOffering.getCpu() < 2 || serviceOffering.getRamSize() < 2048) {
+                throw new InvalidParameterValueException(String.format("Container cluster cannot be created with service offering ID: %s, container cluster template(CoreOS) needs minimum 2 vCPUs and 2 GB RAM", serviceOffering.getUuid()));
+            }
         }
 
         if (sshKeyPair != null && !sshKeyPair.isEmpty()) {
@@ -1840,6 +1847,13 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             serviceOffering = _srvOfferingDao.findById(serviceOfferingId);
             if (serviceOffering == null) {
                 throw new InvalidParameterValueException("Failed to find service offering id: " + serviceOfferingId);
+            } else {
+                if (serviceOffering.isDynamic()) {
+                    throw new InvalidParameterValueException(String.format("Custom service offerings are not supported for container clusters. Container cluster ID: %s, service offering ID: %s", containerCluster.getUuid(), serviceOffering.getUuid()));
+                }
+                if (serviceOffering.getCpu() < 2 || serviceOffering.getRamSize() < 2048) {
+                    throw new InvalidParameterValueException(String.format("Container cluster ID: %s cannot be scaled with service offering ID: %s, container cluster template(CoreOS) needs minimum 2 vCPUs and 2 GB RAM", containerCluster.getUuid(), serviceOffering.getUuid()));
+                }
             }
         }
 
