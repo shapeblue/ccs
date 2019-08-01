@@ -1995,23 +1995,35 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                         UserVmVO userVM = _userVmDao.findById(vmMapVO.getVmId());
 
                         // Gracefully remove-delete k8s node
-                        try {
-                            Pair<Boolean, String> result = SshHelper.sshExecute(publicIp.getAddress().addr(), 2222, "core",
-                                    pkFile, null, String.format("sudo kubectl drain %s --ignore-daemonsets --delete-local-data", userVM.getHostName()),
-                                    10000, 10000, 30000);
-                            if (!result.first()) {
-                                throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Draining kubernetes node unsuccessful");
+                        int retryCounter = 0;
+                        int maxRetries = 3;
+                        while (retryCounter < maxRetries) {
+                            retryCounter++;
+                            try {
+                                Pair<Boolean, String> result = SshHelper.sshExecute(publicIp.getAddress().addr(), 2222, "core",
+                                        pkFile, null, String.format("sudo kubectl drain %s --ignore-daemonsets --delete-local-data", userVM.getHostName()),
+                                        10000, 10000, 30000);
+                                if (!result.first()) {
+                                    throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Draining kubernetes node unsuccessful");
+                                }
+                                result = SshHelper.sshExecute(publicIp.getAddress().addr(), 2222, "core",
+                                        pkFile, null, String.format("sudo kubectl delete node %s", userVM.getHostName()),
+                                        10000, 10000, 30000);
+                                if (!result.first()) {
+                                    throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Deleting kubernetes node unsuccessful");
+                                }
+                                break;
+                            } catch (Exception e) {
+                                if (retryCounter < maxRetries) {
+                                    try {
+                                        Thread.sleep(30000);
+                                    } catch (InterruptedException ie) {}
+                                } else {
+                                    s_logger.warn("Failed to remove kubernetes node while scaling container cluster with ID " + containerCluster.getUuid() + ": " + e);
+                                    stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
+                                    throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, unable to remove kubernetes node!" + e, containerCluster.getUuid()));
+                                }
                             }
-                            result = SshHelper.sshExecute(publicIp.getAddress().addr(), 2222, "core",
-                                    pkFile, null, String.format("sudo kubectl delete node %s", userVM.getHostName()),
-                                    10000, 10000, 30000);
-                            if (!result.first()) {
-                                throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, "Deleting kubernetes node unsuccessful");
-                            }
-                        } catch (Exception e) {
-                            s_logger.warn("Failed to remove kubernetes node while scaling container cluster with ID " + containerCluster.getUuid() + ": " + e);
-                            stateTransitTo(containerClusterId, ContainerCluster.Event.OperationFailed);
-                            throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, unable to remove kubernetes node!" + e, containerCluster.getUuid()));
                         }
 
                         // Remove port-forwarding network rules
