@@ -16,6 +16,7 @@
 // under the License.
 package com.cloud.containercluster;
 
+import org.apache.cloudstack.api.command.user.containercluster.CreateContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.GetContainerClusterConfigCmd;
 import org.apache.cloudstack.api.command.user.containercluster.ListContainerClusterCmd;
 import org.apache.cloudstack.api.command.user.containercluster.ScaleContainerClusterCmd;
@@ -27,26 +28,13 @@ import com.cloud.exception.InsufficientCapacityException;
 import com.cloud.exception.ManagementServerException;
 import com.cloud.exception.ResourceAllocationException;
 import com.cloud.exception.ResourceUnavailableException;
-import com.cloud.user.Account;
 import com.cloud.utils.component.PluggableService;
 
 public interface ContainerClusterService extends PluggableService {
 
     ContainerCluster findById(final Long id);
 
-    ContainerCluster createContainerCluster(String name,
-                                            String displayName,
-                                            Long zoneId,
-                                            Long serviceOffering,
-                                            Account owner,
-                                            Long networkId,
-                                            String sshKeyPair,
-                                            Long nodeCount,
-                                            String dockerRegistryUsername,
-                                            String dockerRegistryPassword,
-                                            String dockerRegistryUrl,
-                                            String dockerRegistryEmail
-                                            ) throws InsufficientCapacityException,
+    ContainerCluster createContainerCluster(CreateContainerClusterCmd cmd) throws InsufficientCapacityException,
                      ResourceAllocationException, ManagementServerException;
 
     boolean startContainerCluster(long containerClusterId, boolean onCreate) throws ManagementServerException,

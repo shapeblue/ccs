@@ -17,15 +17,6 @@ package org.apache.cloudstack.api.command.user.containercluster;
 
 import javax.inject.Inject;
 
-import com.cloud.containercluster.ContainerCluster;
-import com.cloud.containercluster.ContainerClusterService;
-import com.cloud.containercluster.CcsEventTypes;
-import com.cloud.exception.InsufficientCapacityException;
-import com.cloud.exception.ResourceAllocationException;
-import com.cloud.exception.ManagementServerException;
-import com.cloud.exception.ConcurrentOperationException;
-import com.cloud.exception.ResourceUnavailableException;
-import com.cloud.user.Account;
 import org.apache.cloudstack.acl.RoleType;
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
 import org.apache.cloudstack.api.ACL;
@@ -38,14 +29,24 @@ import org.apache.cloudstack.api.CcsApiConstants;
 import org.apache.cloudstack.api.Parameter;
 import org.apache.cloudstack.api.ResponseObject.ResponseView;
 import org.apache.cloudstack.api.ServerApiException;
+import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.cloudstack.api.response.DomainResponse;
 import org.apache.cloudstack.api.response.NetworkResponse;
 import org.apache.cloudstack.api.response.ProjectResponse;
 import org.apache.cloudstack.api.response.ServiceOfferingResponse;
-import org.apache.cloudstack.api.response.ContainerClusterResponse;
 import org.apache.cloudstack.api.response.ZoneResponse;
 import org.apache.cloudstack.context.CallContext;
 import org.apache.log4j.Logger;
+
+import com.cloud.containercluster.CcsEventTypes;
+import com.cloud.containercluster.ContainerCluster;
+import com.cloud.containercluster.ContainerClusterService;
+import com.cloud.exception.ConcurrentOperationException;
+import com.cloud.exception.InsufficientCapacityException;
+import com.cloud.exception.ManagementServerException;
+import com.cloud.exception.ResourceAllocationException;
+import com.cloud.exception.ResourceUnavailableException;
+import com.cloud.user.Account;
 
 @APICommand(name = "createContainerCluster",
         description = "Creates a cluster of VM's for launching containers.",
@@ -126,6 +127,10 @@ public class CreateContainerClusterCmd extends BaseAsyncCreateCmd {
             description = "email of the docker image private registry user")
     private String dockerRegistryEmail;
 
+    @Parameter(name = CcsApiConstants.NODE_ROOT_DISK_SIZE, type = CommandType.LONG,
+            description = "root disk size of root disk for each node")
+    private Long nodeRootDiskSize;
+
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
     /////////////////////////////////////////////////////
@@ -164,6 +169,30 @@ public class CreateContainerClusterCmd extends BaseAsyncCreateCmd {
 
     public String getSSHKeyPairName() {
         return sshKeyPairName;
+    }
+
+    public Long getClusterSize() {
+        return clusterSize;
+    }
+
+    public String getDockerRegistryUserName() {
+        return dockerRegistryUserName;
+    }
+
+    public String getDockerRegistryPassword() {
+        return dockerRegistryPassword;
+    }
+
+    public String getDockerRegistryUrl() {
+        return dockerRegistryUrl;
+    }
+
+    public String getDockerRegistryEmail() {
+        return dockerRegistryEmail;
+    }
+
+    public Long getNodeRootDiskSize() {
+        return nodeRootDiskSize;
     }
 
     @Inject
@@ -253,9 +282,7 @@ public class CreateContainerClusterCmd extends BaseAsyncCreateCmd {
 
             Account owner = _accountService.getActiveAccountById(getEntityOwnerId());
 
-            ContainerCluster cluster = _containerClusterService.createContainerCluster(name,
-                    description, zoneId, serviceOfferingId, owner, networkId, sshKeyPairName, clusterSize,
-                    dockerRegistryUserName, dockerRegistryPassword, dockerRegistryUrl, dockerRegistryEmail);
+            ContainerCluster cluster = _containerClusterService.createContainerCluster(this);
 
             if (cluster != null) {
                 setEntityId(cluster.getId());

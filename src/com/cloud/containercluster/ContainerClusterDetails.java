@@ -19,10 +19,16 @@ package com.cloud.containercluster;
  * Container cluster details
  *
  */
-public interface ContainerClusterDetails {
+interface ContainerClusterDetails {
     long getId();
     long getClusterId();
     String getUserName();
     String getPassword();
+    String getRegistryUsername();
+    String getRegistryPassword();
+    String getRegistryUrl();
+    String getRegistryEmail();
+    boolean getNetworkCleanup();
+    long getNodeRootDiskSize();
     String getKubeConfigData();
 }

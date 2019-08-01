@@ -140,6 +140,7 @@ import com.cloud.template.TemplateApiService;
 import com.cloud.template.VirtualMachineTemplate;
 import com.cloud.user.Account;
 import com.cloud.user.AccountManager;
+import com.cloud.user.AccountService;
 import com.cloud.user.SSHKeyPairVO;
 import com.cloud.user.User;
 import com.cloud.user.dao.AccountDao;
@@ -205,6 +206,8 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     @Inject
     protected VMTemplateDao _templateDao;
     @Inject
+    protected AccountService accountService;
+    @Inject
     protected AccountDao _accountDao;
     @Inject
     protected UserVmDao _vmDao;
@@ -267,19 +270,21 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
     }
 
     @Override
-    public ContainerCluster createContainerCluster(final String name,
-                                                   final String displayName,
-                                                   final Long zoneId,
-                                                   final Long serviceOfferingId,
-                                                   final Account owner,
-                                                   final Long networkId,
-                                                   final String sshKeyPair,
-                                                   final Long clusterSize,
-                                                   final String dockerRegistryUserName,
-                                                   final String dockerRegistryPassword,
-                                                   final String dockerRegistryUrl,
-                                                   final String dockerRegistryEmail)
+    public ContainerCluster createContainerCluster(CreateContainerClusterCmd cmd)
             throws InsufficientCapacityException, ResourceAllocationException, ManagementServerException {
+        final String name = cmd.getName();
+        final String displayName = cmd.getDisplayName();
+        final Long zoneId = cmd.getZoneId();
+        final Long serviceOfferingId = cmd.getServiceOfferingId();
+        final Account owner = accountService.getActiveAccountById(cmd.getEntityOwnerId());
+        final Long networkId = cmd.getNetworkId();
+        final String sshKeyPair= cmd.getSSHKeyPairName();
+        final Long clusterSize = cmd.getClusterSize();
+        final String dockerRegistryUserName = cmd.getDockerRegistryUserName();
+        final String dockerRegistryPassword = cmd.getDockerRegistryPassword();
+        final String dockerRegistryUrl = cmd.getDockerRegistryUrl();
+        final String dockerRegistryEmail = cmd.getDockerRegistryEmail();
+        final Long nodeRootDiskSize = cmd.getNodeRootDiskSize();
 
         if (name == null || name.isEmpty()) {
             throw new InvalidParameterValueException("Invalid name for the container cluster name:" + name);
@@ -394,6 +399,9 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 String randomPassword = new BigInteger(130, random).toString(32);
                 clusterDetails.setPassword(randomPassword);
                 clusterDetails.setNetworkCleanup(networkId == null);
+                if (nodeRootDiskSize != null && nodeRootDiskSize > 0) {
+                    clusterDetails.setNodeRootDiskSize(nodeRootDiskSize * 1024 * 1024);
+                }
                 _containerClusterDetailsDao.persist(clusterDetails);
                 return clusterDetails;
             }
@@ -1444,7 +1452,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
                 }
             }
         }
-        ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerClusterId);
+        final ContainerClusterDetails clusterDetails = _containerClusterDetailsDao.findByClusterId(containerClusterId);
         boolean cleanupNetwork = clusterDetails.getNetworkCleanup();
 
         // if there are VM's that were not expunged, we can not delete the network
@@ -1547,8 +1555,16 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         final String masterIp = ipAddressManager.acquireGuestIpAddress(_networkDao.findById(containerCluster.getNetworkId()), null);
         Network.IpAddresses addrs = new Network.IpAddresses(masterIp, null);
 
-        Map<String, String> customparameterMap = new HashMap<String, String>();
-        customparameterMap.put("rootdisksize", "20");
+        final ContainerClusterDetails clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
+        long rootDiskSize = 0;
+        try {
+            rootDiskSize = clusterDetails.getNodeRootDiskSize()/(1024*1024);
+        } catch (Exception e) {}
+
+        Map<String, String> customParameterMap = new HashMap<String, String>();
+        if (rootDiskSize > 0) {
+            customParameterMap.put("rootdisksize", String.valueOf(rootDiskSize));
+        }
 
         String hostName = containerCluster.getName() + "-k8s-master";
 
@@ -1609,7 +1625,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         masterVm = _userVmService.createAdvancedVirtualMachine(zone, serviceOffering, template, networkIds, owner,
                 hostName, containerCluster.getDescription(), null, null, null,
                 null, BaseCmd.HTTPMethod.POST, base64UserData, containerCluster.getKeyPair(),
-                null, addrs, null, null, null, customparameterMap, null, null, null);
+                null, addrs, null, null, null, customParameterMap, null, null, null);
 
         if (s_logger.isDebugEnabled()) {
             s_logger.debug("Created master VM: " + hostName + " in the container cluster: " + containerCluster.getName());
@@ -1634,8 +1650,16 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
         Network.IpAddresses addrs = new Network.IpAddresses(null, null);
 
-        Map<String, String> customparameterMap = new HashMap<String, String>();
-        customparameterMap.put("rootdisksize", "10");
+        final ContainerClusterDetails clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
+        long rootDiskSize = 0;
+        try {
+            rootDiskSize = clusterDetails.getNodeRootDiskSize()/(1024*1024);
+        } catch (Exception e) {}
+
+        Map<String, String> customParameterMap = new HashMap<String, String>();
+        if (rootDiskSize > 0) {
+            customParameterMap.put("rootdisksize", String.valueOf(rootDiskSize));
+        }
 
         String hostName = containerCluster.getName() + "-k8s-node-" + String.valueOf(nodeInstance);
 
@@ -1648,8 +1672,6 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
 
             k8sNodeConfig = k8sNodeConfig.replace(masterIPString, masterIp);
             k8sNodeConfig = k8sNodeConfig.replace(clusterTokenString, generateClusterToken(containerCluster));
-
-            ContainerClusterDetailsVO clusterDetails = _containerClusterDetailsDao.findByClusterId(containerCluster.getId());
 
             /* genarate /.docker/config.json file on the nodes only if container cluster is created to
              * use docker private registry */
@@ -1694,7 +1716,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
         nodeVm = _userVmService.createAdvancedVirtualMachine(zone, serviceOffering, template, networkIds, owner,
                 hostName, containerCluster.getDescription(), null, null, null,
                 null, BaseCmd.HTTPMethod.POST, base64UserData, containerCluster.getKeyPair(),
-                null, addrs, null, null, null, customparameterMap, null, null, null);
+                null, addrs, null, null, null, customParameterMap, null, null, null);
 
         if (s_logger.isDebugEnabled()) {
             s_logger.debug("Created cluster node VM: " + hostName + " in the container cluster: " + containerCluster.getName());

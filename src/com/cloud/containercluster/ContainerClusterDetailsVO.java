@@ -52,6 +52,7 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
         this.clusterId = clusterId;
     }
 
+    @Override
     public String getRegistryUsername() {
         return registryUsername;
     }
@@ -60,6 +61,7 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
         this.registryUsername = registryUsername;
     }
 
+    @Override
     public String getRegistryPassword() {
         return registryPassword;
     }
@@ -68,6 +70,7 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
         this.registryPassword = registryPassword;
     }
 
+    @Override
     public String getRegistryUrl() {
         return registryUrl;
     }
@@ -76,6 +79,7 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
         this.registryUrl = registryUrl;
     }
 
+    @Override
     public String getRegistryEmail() {
         return registryEmail;
     }
@@ -84,6 +88,7 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
         this.registryEmail = registryEmail;
     }
 
+    @Override
     public String getKubeConfigData() {
         return kubeConfigData;
     }
@@ -92,6 +97,7 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
         this.kubeConfigData = kubeConfigData;
     }
 
+    @Override
     public boolean getNetworkCleanup() {
         return networkCleanup;
     }
@@ -140,6 +146,9 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
     @Column(name = "network_cleanup")
     boolean networkCleanup;
 
+    @Column(name = "node_root_disk_size")
+    long nodeRootDiskSize;
+
     public ContainerClusterDetailsVO() {
 
     }
@@ -148,5 +157,14 @@ public class ContainerClusterDetailsVO implements ContainerClusterDetails {
         this.clusterId = clusterId;
         this.username = userName;
         this.password = password;
+    }
+
+    @Override
+    public long getNodeRootDiskSize() {
+        return nodeRootDiskSize;
+    }
+
+    public void setNodeRootDiskSize(long nodeRootDiskSize) {
+        this.nodeRootDiskSize = nodeRootDiskSize;
     }
 }

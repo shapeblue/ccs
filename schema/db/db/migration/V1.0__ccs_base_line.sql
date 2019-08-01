@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS `cloud`.`sb_ccs_container_cluster_details` (
     `registry_password` varchar(255),
     `registry_url` varchar(255),
     `registry_email` varchar(255),
+    `node_root_disk_size` bigint(20) unsigned DEFAULT 0 COMMENT 'root disk size of root disk for each node',
     `kube_config_data` text COMMENT 'configuration file data of this cluster',
     `network_cleanup` tinyint unsigned NOT NULL DEFAULT 1 COMMENT 'true if network needs to be clean up on deletion of container cluster. Should be false if user specfied network for the cluster',
 

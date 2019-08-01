@@ -21,4 +21,5 @@ public class CcsApiConstants {
     public static final String DOCKER_REGISTRY_PASSWORD = "dockerregistrypassword";
     public static final String DOCKER_REGISTRY_URL = "dockerregistryurl";
     public static final String DOCKER_REGISTRY_EMAIL = "dockerregistryemail";
+    public static final String NODE_ROOT_DISK_SIZE = "noderootdisksize";
 }

@@ -206,6 +206,14 @@
                                                 });
                                             }
                                         },
+                                        noderootdisksize: {
+                                            label: 'Node root disk size (in GB)',
+                                            //docID: 'helpContainerClusterNodeRootDiskSize',
+                                            validation: {
+                                                required: true,
+                                                number: true
+                                            }
+                                        },
                                         network: {
                                             label: 'label.network',
                                             //docID: 'helpContainerClusterNetwork',
@@ -321,7 +329,8 @@
                                         zoneid: args.data.zone,
                                         serviceofferingid: args.data.serviceoffering,
                                         size: args.data.size,
-                                        keypair: args.data.sshkeypair
+                                        keypair: args.data.sshkeypair,
+                                        noderootdisksize: args.data.noderootdisksize
                                     };
 
                                     if (args.data.supportPrivateRegistry) {
