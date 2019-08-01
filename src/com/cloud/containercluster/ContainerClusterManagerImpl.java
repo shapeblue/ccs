@@ -1869,7 +1869,7 @@ public class ContainerClusterManagerImpl extends ManagerBase implements Containe
             }
             if (serviceOffering.getRamSize() < existingServiceOffering.getRamSize() ||
                 serviceOffering.getCpu()*serviceOffering.getSpeed() < existingServiceOffering.getCpu()*existingServiceOffering.getSpeed()) {
-                throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, service offering for the container cluster not found!", containerCluster.getUuid()));
+                throw new ServerApiException(ApiErrorCode.INTERNAL_ERROR, String.format("Scaling container cluster ID: %s failed, service offering for the container cluster cannot be scaled down!", containerCluster.getUuid()));
             }
 
             // ToDo: Check capacity with new service offering at this point, how?
