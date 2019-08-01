@@ -210,7 +210,6 @@
                                             label: 'Node root disk size (in GB)',
                                             //docID: 'helpContainerClusterNodeRootDiskSize',
                                             validation: {
-                                                required: true,
                                                 number: true
                                             }
                                         },
@@ -248,7 +247,8 @@
                                             label: 'Cluster size',
                                             //docID: 'helpContainerClusterSize',
                                             validation: {
-                                                required: true
+                                                required: true,
+                                                number: true
                                             },
                                         },
                                         sshkeypair: {
@@ -329,9 +329,14 @@
                                         zoneid: args.data.zone,
                                         serviceofferingid: args.data.serviceoffering,
                                         size: args.data.size,
-                                        keypair: args.data.sshkeypair,
-                                        noderootdisksize: args.data.noderootdisksize
+                                        keypair: args.data.sshkeypair
                                     };
+
+                                    if (args.data.noderootdisksize != null && args.data.noderootdisksize != "" && args.data.noderootdisksize > 0) {
+                                        $.extend(data, {
+                                            noderootdisksize: args.data.noderootdisksize
+                                        });
+                                    }
 
                                     if (args.data.supportPrivateRegistry) {
                                         $.extend(data, {
